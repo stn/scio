@@ -901,7 +901,7 @@ sealed trait SCollection[T] extends PCollectionWrapper[T] {
    * @group window
    */
   def withWindow[W <: BoundedWindow](
-    implicit tcoder: Coder[T], wcoder: Coder[BoundedWindow]): SCollection[(T, W)] = this.parDo(
+    implicit tcoder: Coder[T]): SCollection[(T, W)] = this.parDo(
     new DoFn[T, (T, BoundedWindow)] {
       @ProcessElement
       private[scio] def processElement(c: DoFn[T, (T, BoundedWindow)]#ProcessContext,

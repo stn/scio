@@ -24,6 +24,7 @@ import com.spotify.scio.io.Tap
 import com.spotify.scio.testing.AvroIO
 import com.spotify.scio.util.{ClosureCleaner, ScioUtil}
 import com.spotify.scio.values.SCollection
+import com.spotify.scio.coders.Coder
 import org.apache.avro.Schema
 import org.apache.avro.reflect.ReflectData
 import org.apache.avro.specific.SpecificRecordBase
@@ -93,7 +94,7 @@ package object avro {
      * Return a new SCollection by applying a function to all Parquet Avro records of this Parquet
      * file.
      */
-    def map[U: ClassTag](f: T => U): SCollection[U] = if (context.isTest) {
+    def map[U : ClassTag : Coder](f: T => U): SCollection[U] = if (context.isTest) {
       context.getTestInput(AvroIO[U](path))
     } else {
       val cls = ScioUtil.classOf[T]
@@ -137,14 +138,14 @@ package object avro {
      * Return a new SCollection by first applying a function to all Parquet Avro records of
      * this Parquet file, and then flattening the results.
      */
-    def flatMap[U: ClassTag](f: T => TraversableOnce[U]): SCollection[U] =
+    def flatMap[U: ClassTag : Coder](f: T => TraversableOnce[U]): SCollection[U] =
       this
         // HadoopInputFormatIO does not support custom coder, force SerializableCoder
         .map(x => f(x).asInstanceOf[Serializable])
         .asInstanceOf[SCollection[TraversableOnce[U]]]
         .flatten
 
-    private def toSCollection: SCollection[T] = {
+    private def toSCollection(implicit c: Coder[T]): SCollection[T] = {
       if (projection != null) {
         logger.warn("Materializing Parquet Avro records with projection may cause " +
           "NullPointerException. Perform a `map` or `flatMap` immediately after " +
@@ -169,9 +170,9 @@ package object avro {
   }
 
   object ParquetAvroFile {
-    implicit def parquetAvroFileToSCollection[T: ClassTag](self: ParquetAvroFile[T])
+    implicit def parquetAvroFileToSCollection[T: Coder](self: ParquetAvroFile[T])
     : SCollection[T] = self.toSCollection
-    implicit def parquetAvroFileToParquetAvroSCollection[T: ClassTag](self: ParquetAvroFile[T])
+    implicit def parquetAvroFileToParquetAvroSCollection[T: ClassTag : Coder](self: ParquetAvroFile[T])
     : ParquetAvroSCollection[T] = new ParquetAvroSCollection(self.toSCollection)
   }
 

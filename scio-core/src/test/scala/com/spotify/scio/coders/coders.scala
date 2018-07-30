@@ -139,6 +139,7 @@ class CodersTest extends FlatSpec with Matchers {
     check(ta)
     check(tb)
     check((123, "hello", ta, tb, List(("bar", 1, "foo"))))
+
   }
 
   it should "support all the already supported types" ignore {

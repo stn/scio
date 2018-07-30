@@ -221,15 +221,23 @@ trait JavaCoders {
   // implicit def mutationCaseCoder: Coder[com.google.bigtable.v2.Mutation.MutationCase] = ???
   // implicit def mutationCoder: Coder[com.google.bigtable.v2.Mutation] = ???
 
-  // implicit def boundedWindowCoder: Coder[BoundedWindow] = ???
-  // implicit def intervalWindowCoder: Coder[IntervalWindow] = ???
+  import org.apache.beam.sdk.transforms.windowing.{BoundedWindow, IntervalWindow}
+  // implicit def boundedWindowCoder: Coder[BoundedWindow] =
+  //   Coder.beam(BoundedWindow.getCoder())
+  implicit def intervalWindowCoder: Coder[IntervalWindow] =
+    Coder.beam(IntervalWindow.getCoder())
+
   // implicit def paneinfoCoder: Coder[PaneInfo] = ???
   implicit def instantCoder: Coder[org.joda.time.Instant] = Coder.beam(InstantCoder.of())
   implicit def tablerowCoder: Coder[com.google.api.services.bigquery.model.TableRow] =
     Coder.beam(org.apache.beam.sdk.io.gcp.bigquery.TableRowJsonCoder.of())
-  // implicit def messageCoder: Coder[org.apache.beam.sdk.io.gcp.pubsub.PubsubMessage] = ???
+  implicit def messageCoder: Coder[org.apache.beam.sdk.io.gcp.pubsub.PubsubMessage] =
+    Coder.beam(org.apache.beam.sdk.io.gcp.pubsub.PubsubMessageWithAttributesCoder.of())
   // implicit def entityCoder: Coder[com.google.datastore.v1.Entity] = ???
-  // implicit def statcounterCoder: Coder[com.spotify.scio.util.StatCounter] = ???
+
+  // StatCounter is mutable -> use a kryocoder
+  implicit def statcounterCoder: Coder[com.spotify.scio.util.StatCounter] =
+    Coder.fallback
 }
 
 trait AlgebirdCoders {

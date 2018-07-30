@@ -19,6 +19,7 @@ package com.spotify.scio.examples.complete
 
 import com.spotify.scio.testing._
 import org.joda.time.{Duration, Instant}
+import com.spotify.scio.coders.Implicits._
 
 class AutoCompleteTest extends PipelineSpec {
 

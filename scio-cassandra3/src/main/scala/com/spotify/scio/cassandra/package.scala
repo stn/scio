@@ -22,6 +22,7 @@ import com.spotify.scio.testing.TestIO
 import com.spotify.scio.values.SCollection
 
 import scala.concurrent.Future
+import com.spotify.scio.coders.Implicits._
 
 /**
  * Main package for Cassandra APIs. Import all.
