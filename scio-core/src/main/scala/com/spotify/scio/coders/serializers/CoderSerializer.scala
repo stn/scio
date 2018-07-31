@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 Spotify AB.
+ * Copyright 2016 Spotify AB.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,26 +15,23 @@
  * under the License.
  */
 
-package com.spotify.scio.coders
+package com.spotify.scio.coders.serializers
 
 import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.io.{Input, Output}
-import com.google.protobuf.ByteString
 import com.twitter.chill.KSerializer
+import org.apache.beam.sdk.coders.{Coder => BCoder}
+import org.apache.beam.sdk.util.CoderUtils
 
-private class ByteStringSerializer extends KSerializer[ByteString] {
-  override def read(kryo: Kryo, input: Input, tpe: Class[ByteString]): ByteString = {
-    val n = input.readInt()
-    ByteString.copyFrom(input.readBytes(n))
+private[coders] class CoderSerializer[T](private val coder: BCoder[T]) extends KSerializer[T] {
+
+  override def write(kser: Kryo, out: Output, obj: T): Unit = {
+    val bytes = CoderUtils.encodeToByteArray(coder, obj)
+    out.writeInt(bytes.length)
+    out.write(bytes)
   }
 
+  override def read(kser: Kryo, in: Input, cls: Class[T]): T =
+    CoderUtils.decodeFromByteArray(coder, in.readBytes(in.readInt()))
 
-  override def write(kryo: Kryo, output: Output, byteStr: ByteString): Unit = {
-    val len = byteStr.size
-    output.writeInt(len)
-    val bytes = byteStr.iterator
-    while (bytes.hasNext) {
-      output.write(bytes.nextByte())
-    }
-  }
 }

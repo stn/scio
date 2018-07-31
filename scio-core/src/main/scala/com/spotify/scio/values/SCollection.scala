@@ -101,6 +101,14 @@ object SCollection {
   : PairSCollectionFunctions[K, V] =
     new PairSCollectionFunctions(s)
 
+  implicit def makePairHashSCollectionFunctions[K, V](s: SCollection[(K, V)])
+  : PairHashSCollectionFunctions[K, V] =
+    new PairHashSCollectionFunctions(s)
+
+  implicit def makePairSkewedSCollectionFunctions[K, V](s: SCollection[(K, V)])
+  : PairSkewedSCollectionFunctions[K, V] =
+    new PairSkewedSCollectionFunctions(s)
+
 }
 
 // scalastyle:off number.of.methods
@@ -346,6 +354,19 @@ sealed trait SCollection[T] extends PCollectionWrapper[T] {
    * @group transform
    */
   def distinct: SCollection[T] = this.pApply(Distinct.create[T]())
+
+  /**
+   * Returns a new SCollection with distinct elements using given function to obtain a
+   * representative value for each input element.
+   *
+   * @param f The funciton to use to get representative values.
+   * @tparam U The type of representative values used to dedup.
+   * @group transform
+   */
+  def distinctBy[U](f: T => U)(implicit ctu: ClassTag[U]): SCollection[T] =
+    this.pApply(Distinct
+      .withRepresentativeValueFn(Functions.serializableFn(f))
+      .withRepresentativeType(TypeDescriptor.of(ctu.runtimeClass).asInstanceOf[TypeDescriptor[U]]))
 
   /**
    * Return a new SCollection containing only the elements that satisfy a predicate.
@@ -607,14 +628,14 @@ sealed trait SCollection[T] extends PCollectionWrapper[T] {
    * right side should be tiny and fit in memory.
    * @group hash
    */
-  def cross[U: Coder](that: SCollection[U])(implicit coder: Coder[T]): SCollection[(T, U)] =
-    this.transform { in =>
-      val side = that.asListSideInput
-      in
-        .withSideInputs(side)
-        .flatMap((t, s) => s(side).map((t, _)))
-        .toSCollection
-    }
+  def cross[U: Coder](that: SCollection[U])(implicit tcoder: Coder[T]): SCollection[(T, U)] = this.transform { in =>
+    // TODO: switch to ListSideInput when https://github.com/spotify/scio/issues/1152 is resolved
+    val side = that.aggregate(Aggregator.toList[U]).asSingletonSideInput
+    in
+      .withSideInputs(side)
+      .flatMap((t, s) => s(side).map((t, _)))
+      .toSCollection
+  }
 
   /**
    * Look up values in an `SCollection[(T, V)]` for each element `T` in this SCollection by

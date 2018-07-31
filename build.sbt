@@ -20,7 +20,7 @@ import Keys._
 import sbtassembly.AssemblyPlugin.autoImport._
 import com.typesafe.sbt.SbtGit.GitKeys.gitRemoteRepo
 
-val beamVersion = "2.4.0"
+val beamVersion = "2.5.0"
 
 val algebirdVersion = "0.13.4"
 val annoy4sVersion = "0.6.0"
@@ -34,10 +34,9 @@ val chillVersion = "0.9.2"
 val circeVersion = "0.9.1"
 val commonsIoVersion = "2.6"
 val commonsMath3Version = "3.6.1"
-val commonsPoolVersion = "2.5.0"
 val elasticsearch2Version = "2.1.0"
 val elasticsearch5Version = "5.5.0"
-val featranVersion = "0.1.25"
+val featranVersion = "0.2.0"
 val gcsConnectorVersion = "1.6.3-hadoop2"
 val gcsVersion = "1.8.0"
 val guavaVersion = "20.0"
@@ -52,11 +51,10 @@ val junitInterfaceVersion = "0.11"
 val junitVersion = "4.12"
 val kantanCsvVersion = "0.4.0"
 val kryoVersion = "4.0.2" // explicitly depend on 4.0.1+ due to https://github.com/EsotericSoftware/kryo/pull/516
-val mockitoVersion = "1.10.19"
 val parquetAvroExtraVersion = "0.2.2"
 val parquetVersion = "1.9.0"
 val protobufGenericVersion = "0.2.4"
-val protobufVersion = "3.3.1"
+val protobufVersion = "3.5.1"
 val scalacheckShapelessVersion = "1.1.8"
 val scalacheckVersion = "1.13.5"
 val scalaMacrosVersion = "2.1.1"
@@ -66,7 +64,7 @@ val shapelessDatatypeVersion = "0.1.9"
 val slf4jVersion = "1.7.25"
 val sparkeyVersion = "2.3.0"
 val tensorFlowVersion = "1.8.0"
-val zoltarVersion = "0.3.1"
+val zoltarVersion = "0.4.0"
 val bijectionVersion = "0.9.5"
 val magnoliaVersion = "0.8.0"
 
@@ -110,6 +108,7 @@ val commonSettings = Sonatype.sonatypeSettings ++ assemblySettings ++ Seq(
   resolvers += Resolver.sonatypeRepo("public"),
 
   scalastyleSources in Compile ++= (unmanagedSourceDirectories in Test).value,
+  testOptions in Test += Tests.Argument("-oD"),
   testOptions += Tests.Argument(TestFrameworks.JUnit, "-q", "-v"),
   testOptions ++= {
     if (sys.env.contains("SLOW")) {
@@ -118,6 +117,9 @@ val commonSettings = Sonatype.sonatypeSettings ++ assemblySettings ++ Seq(
       Seq(Tests.Argument(TestFrameworks.ScalaTest, "-l", "org.scalatest.tags.Slow"))
     }
   },
+
+  evictionWarningOptions in update := EvictionWarningOptions.default
+    .withWarnTransitiveEvictions(false),
 
   coverageExcludedPackages := Seq(
     "com\\.spotify\\.scio\\.examples\\..*",
@@ -175,7 +177,15 @@ val commonSettings = Sonatype.sonatypeSettings ++ assemblySettings ++ Seq(
 ) ++ mimaSettings
 
 lazy val itSettings = Defaults.itSettings ++ Seq(
-  scalastyleSources in Compile ++= (unmanagedSourceDirectories in IntegrationTest).value
+  scalastyleSources in Compile ++= (unmanagedSourceDirectories in IntegrationTest).value,
+  // exclude all sources if we don't have GCP credentials
+  (excludeFilter in unmanagedSources) in IntegrationTest := {
+    if (BuildCredentials.exists) {
+      HiddenFileFilter
+    } else {
+      HiddenFileFilter || "*.scala"
+    }
+  }
 )
 
 lazy val noPublishSettings = Seq(
@@ -304,7 +314,6 @@ lazy val scioCore: Project = Project(
     "com.google.protobuf" % "protobuf-java" % protobufVersion,
     "me.lyh" %% "protobuf-generic" % protobufGenericVersion,
     "org.apache.xbean" % "xbean-asm5-shaded" % asmVersion,
-    "org.apache.commons" % "commons-pool2" %  commonsPoolVersion,
     // -- used to test Safe codders
     "com.chuusai" %% "shapeless" % shapelessVersion,
     "com.propensive" %% "magnolia" % magnoliaVersion,
@@ -325,13 +334,10 @@ lazy val scioTest: Project = Project(
 ).settings(
   commonSettings ++ itSettings,
   description := "Scio helpers for ScalaTest",
-  // necessary to properly test since we need this value at compile time
-  initialize in Test ~= { _ =>
-    System.setProperty( "OVERRIDE_TYPE_PROVIDER", "com.spotify.scio.bigquery.validation.SampleOverrideTypeProvider" )
-  },
   libraryDependencies ++= Seq(
     "org.apache.beam" % "beam-runners-direct-java" % beamVersion,
     "org.apache.beam" % "beam-runners-google-cloud-dataflow-java" % beamVersion % "it",
+    "org.apache.beam" % "beam-sdks-java-core" % beamVersion % "test",
     "org.apache.beam" % "beam-sdks-java-core" % beamVersion % "test" classifier "tests",
     "org.scalatest" %% "scalatest" % scalatestVersion,
     "org.scalacheck" %% "scalacheck" % scalacheckVersion % "test,it",
@@ -415,7 +421,6 @@ lazy val scioCassandra2: Project = Project(
 ).settings(
   commonSettings ++ itSettings,
   description := "Scio add-on for Apache Cassandra 2.x",
-  scalaSource in Compile := (baseDirectory in ThisBuild).value / "scio-cassandra3/src/main/scala",
   libraryDependencies ++= Seq(
     "com.datastax.cassandra" % "cassandra-driver-core" % "2.1.10.3",
     "org.apache.cassandra" % "cassandra-all" % "2.0.17",
@@ -527,11 +532,20 @@ lazy val scioJdbc: Project = Project(
   scioTest % "test"
 )
 
+val ensureSourceManaged = taskKey[Unit]("ensureSourceManaged")
+
 lazy val scioParquet: Project = Project(
   "scio-parquet",
   file("scio-parquet")
 ).settings(
   commonSettings,
+  // change annotation processor output directory so IntelliJ can pick them up
+  ensureSourceManaged := IO.createDirectory(sourceManaged.value / "main"),
+  (compile in Compile) := Def.task {
+    ensureSourceManaged.value
+    (compile in Compile).value
+  }.value,
+  javacOptions ++= Seq("-s", (sourceManaged.value / "main").toString),
   description := "Scio add-on for Parquet",
   libraryDependencies ++= Seq(
     "me.lyh" %% "parquet-avro-extra" % parquetAvroExtraVersion,
@@ -550,9 +564,16 @@ lazy val scioParquet: Project = Project(
 lazy val scioTensorFlow: Project = Project(
   "scio-tensorflow",
   file("scio-tensorflow")
-).settings(
+).enablePlugins(ProtobufPlugin).settings(
   commonSettings,
   description := "Scio add-on for TensorFlow",
+  version in ProtobufConfig := protobufVersion,
+  protobufRunProtoc in ProtobufConfig := (args =>
+    // protoc-jar does not include 3.3.1 binary
+    com.github.os72.protocjar.Protoc.runProtoc("-v3.5.1" +: args.toArray)
+  ),
+  sourceDirectories in Compile := (sourceDirectories in Compile).value.filterNot(_.getPath.endsWith("/src_managed/main")),
+  managedSourceDirectories in Compile := (managedSourceDirectories in Compile).value.filterNot(_.getPath.endsWith("/src_managed/main")),
   libraryDependencies ++= Seq(
     "org.tensorflow" % "tensorflow" % tensorFlowVersion,
     "org.tensorflow" % "proto" % tensorFlowVersion,
@@ -609,10 +630,17 @@ lazy val scioExamples: Project = Project(
     "mysql" % "mysql-connector-java" % "5.1.+",
     "com.google.cloud.sql" % "mysql-socket-factory" % "1.0.2",
     "org.slf4j" % "slf4j-simple" % slf4jVersion,
-    "org.scalacheck" %% "scalacheck" % scalacheckVersion % "test",
-    "org.mockito" % "mockito-all" % mockitoVersion % "test"
+    "org.scalacheck" %% "scalacheck" % scalacheckVersion % "test"
   ),
   addCompilerPlugin(paradiseDependency),
+  // exclude problematic sources if we don't have GCP credentials
+  excludeFilter in unmanagedSources := {
+    if (BuildCredentials.exists) {
+      HiddenFileFilter
+    } else {
+      HiddenFileFilter || "TypedBigQueryTornadoes*.scala"
+    }
+  },
   sources in doc in Compile := List()
 ).dependsOn(
   scioCore,

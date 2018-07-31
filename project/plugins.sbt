@@ -1,4 +1,4 @@
-addSbtPlugin("com.cavorite" % "sbt-avro-1-8" % "1.1.3")
+addSbtPlugin("com.cavorite" % "sbt-avro-1-8" % "1.1.4")
 addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "0.14.6")
 addSbtPlugin("com.eed3si9n" % "sbt-unidoc" % "0.4.1")
 addSbtPlugin("com.github.gseitz" % "sbt-protobuf" % "0.6.3")
@@ -12,5 +12,5 @@ addSbtPlugin("pl.project13.scala" % "sbt-jmh" % "0.3.4")
 addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "0.2.0")
 
 libraryDependencies ++= Seq(
-  "com.github.os72" % "protoc-jar" % "3.3.0.1"
+  "com.github.os72" % "protoc-jar" % "3.5.1.1"
 )
