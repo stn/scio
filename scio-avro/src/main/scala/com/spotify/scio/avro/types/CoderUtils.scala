@@ -125,16 +125,21 @@ private[scio] object CoderUtils {
     val wtt = weakTypeOf[T]
     val companioned = wtt.typeSymbol
 
-    if(wtt <:< typeOf[Seq[_]]) {
+    if(wtt <:< typeOf[Iterable[_]]) {
       c.abort(c.enclosingPosition,
         s"Automatic coder derivation can't derive a Coder for $wtt <: Seq")
+    }
+
+    if(wtt.toString.startsWith("java")) {
+      c.abort(c.enclosingPosition,
+        s"Automatic coder derivation can't derive a Coder for java classes")
     }
 
     val magTree = magnolia.Magnolia.gen[T](c)
 
     def getLazyVal =
       magTree match {
-        case q"lazy val $name = $body; $rest" =>
+        case q"val $name = $body; $rest" =>
           body
       }
 
@@ -147,27 +152,23 @@ private[scio] object CoderUtils {
     // scalastyle:off line.size.limit
     val removeAnnotations =
       new Transformer {
-        override def transform(tree: Tree) =
+        override def transform(tree: Tree) = {
           tree match {
-            case Apply(TypeApply(Select(Select(_, TermName("Magnolia")), TermName("caseClass")), _),
-              params @ List(name, isObj, isVal, ps, _, construct)) =>
-              q"""_root_.magnolia.Magnolia.caseClass(
-                  $name, $isObj, $isVal, $ps, scala.Array(), $construct)"""
-            case q"com.spotify.scio.coders.Implicits.dispatch(new magnolia.SealedTrait($name, $subtypes, $annotations))" =>
-              q"_root_.com.spotify.scio.coders.Implicits.dispatch(new magnolia.SealedTrait($name, $subtypes, Array()))"
-            case q"magnolia.Magnolia.param[$tc, $t, $pt]($name, $isRepeated, $typeclass, $default, $f, $annotations)" =>
-              val tcname = c.freshName(s"paramTypeclasssss")
-              val tcTermName = TermName(tcname)
-              q"""
-              val $tcTermName = $typeclass
-              _root_.magnolia.Magnolia.param[$tc, $t, $pt]($name, $isRepeated, $tcTermName, $default, $f, Array())
-              """
+            case Apply(AppliedTypeTree(Select(pack, TypeName("CaseClass")), ps), List(typeName, isObject, isValueClass, params, annotations)) =>
+              Apply(AppliedTypeTree(Select(pack, TypeName("CaseClass")), ps), List(typeName, isObject, isValueClass, params, q"""Array()"""))
+            case q"""new magnolia.CaseClass[$tc, $t]($typeName, $isObject, $isValueClass, $params, $annotations){ $body }""" =>
+              println(s"match CaseClass => \n $tree")
+              q"""_root_.magnolia.CaseClass[$tc, $t]($typeName, $isObject, $isValueClass, $params, Array()){ $body }"""
+            case q"com.spotify.scio.coders.Coder.dispatch(new magnolia.SealedTrait($name, $subtypes, $annotations))" =>
+              q"_root_.com.spotify.scio.coders.Coder.dispatch(new magnolia.SealedTrait($name, $subtypes, Array()))"
+            case q"""magnolia.Magnolia.param[$tc, $t, $p]($name, $idx, $repeated, $tcParam, $defaultVal, $annotations)""" =>
+              q"""_root_.magnolia.Magnolia.param[$tc, $t, $p]($name, $idx, $repeated, $tcParam, $defaultVal, Array())"""
             case t =>
               super.transform(tree)
           }
+        }
       }
     // scalastyle:on line.size.limit
-
     val coder = removeAnnotations.transform(getLazyVal)
 
     //XXX: find a way to get rid of $outer references at compile time
