@@ -56,6 +56,7 @@ object ScioBenchmarkSettings {
   val shuffleConf = Map("ShuffleService" -> Array("--experiments=shuffle_mode=service"))
 }
 
+// scalastyle:off number.of.types
 // scalastyle:off number.of.methods
 object ScioBenchmark {
 
@@ -78,7 +79,7 @@ object ScioBenchmark {
 
   case class CircleCIEnv(buildNum: Long, gitHash: String)
 
-  def getCircleCIEnv(argz: Args): Option[CircleCIEnv] = {
+  private def getCircleCIEnv(argz: Args): Option[CircleCIEnv] = {
     val isCircleCIRun = sys.env.get("CIRCLECI").contains("true")
     val isTestRun = argz.boolean("testDSIntegration", false)
 
@@ -91,7 +92,8 @@ object ScioBenchmark {
     } else if (isTestRun) {
       Some(CircleCIEnv(0L, "TEST-ENV-GIT-HASH"))
     } else {
-      println("CircleCI env variable not found. Will not publish benchmark results to Datastore")
+      prettyPrint("CircleCI",
+        "CIRCLECI env variable not found. Will not publish benchmark results to Datastore.")
       None
     }
   }
@@ -108,11 +110,11 @@ object ScioBenchmark {
       .withZone(DateTimeZone.UTC)
       .print(System.currentTimeMillis())
     val prefix = s"ScioBenchmark-$name-$timestamp"
+    val circleCIEnv = getCircleCIEnv(argz)
+    circleCIEnv.foreach(env => prettyPrint("Circle CI Env: ", env.toString))
     val results = benchmarks
       .filter(_.name.matches(regex))
       .flatMap(_.run(projectId, prefix))
-    lazy val circleCIEnv = getCircleCIEnv(argz)
-    circleCIEnv.foreach(env => prettyPrint("Circle CI Env: ", env.toString))
 
     import scala.concurrent.ExecutionContext.Implicits.global
     val future = Future.sequence(results.map(_.result.finalState))
@@ -152,10 +154,14 @@ object ScioBenchmark {
 
   case class OperationBenchmark(opName: String, metrics: Map[String, String])
 
+  // scalastyle:off regex
+  // Save metrics to integration testing Datastore instance + update the most recent build
+  // number. Can't make this into a transaction becaue the DS limit is 25 entities per transaction
   private def saveMetricsToDataStore(circleCIEnv: CircleCIEnv,
                                      benchmarks: Iterable[OperationBenchmark]): Unit = {
     println("Saving metrics to DataStore...")
 
+    // @todo use Shapeless datatypes
     benchmarks.foreach { benchmark =>
       val entity = Entity.newBuilder().setKey(
         DatastoreHelper.makeKey(circleCIEnv.buildNum.toString, benchmark.opName))
@@ -171,14 +177,29 @@ object ScioBenchmark {
       try {
         datastore.commit(CommitRequest.newBuilder()
           .setMode(CommitRequest.Mode.NON_TRANSACTIONAL)
-          .addMutations(Mutation.newBuilder().setUpsert(entity).build())
+          .addMutations(Mutation.newBuilder().setInsert(entity).build())
           .build())
       } catch {
         case e: Exception => println("Caught exception committing to DataStore. Will not " +
           s"publish metrics for operation ${benchmark.opName}")
       }
     }
+
+    val lastRun = Entity.newBuilder().setKey(
+      DatastoreHelper.makeKey("LAST_RUN"))
+    lastRun.putProperties("buildNum", DatastoreHelper.makeValue(circleCIEnv.buildNum).build())
+    lastRun.putProperties("timestamp", DatastoreHelper.makeValue(Instant.now().toString).build())
+
+    try {
+      datastore.commit(CommitRequest.newBuilder()
+        .setMode(CommitRequest.Mode.NON_TRANSACTIONAL)
+        .addMutations(Mutation.newBuilder().setInsert(lastRun).build())
+        .build())
+    } catch {
+      case e: Exception => println(s"Caught exception committing last run info to Datastore: $e")
+    }
   }
+  // scalastyle:on regex
 
   private def prettyPrint(k: String, v: String): Unit = {
     // scalastyle:off regex
@@ -204,13 +225,6 @@ object ScioBenchmark {
     }
 
   case class BenchmarkResult(name: String, extraArgs: Array[String], result: ScioResult)
-  case class BenchmarkMetrics(
-                               operation: String,
-                               timestamp: Instant,
-                               memoryGB: Double,
-                               pDiskGB: Double,
-                               timeElapsedSeconds: Long
-                             )
 
   abstract class Benchmark(val extraConfs: Map[String, Array[String]] = null) {
 
@@ -450,3 +464,4 @@ object ScioBenchmark {
 
 }
 // scalastyle:on number.of.methods
+// scalastyle:on number.of.types
