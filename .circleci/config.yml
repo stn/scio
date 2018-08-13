@@ -10,6 +10,7 @@ common_settings: &common_settings
     - image: circleci/openjdk:8-jdk
       environment:
         GOOGLE_APPLICATION_CREDENTIALS: scripts/data-integration-test.json
+        DATASTORE_PROJECT_ID: data-integration-test
   working_directory: ~/scio
   resource_class: xlarge
 
@@ -38,6 +39,7 @@ build_settings: &build_settings
           find ~ -maxdepth 1 -name "*.tar.gz"
           if [ -f ~/resolution-cache.tar.gz ]; then tar xzf ~/resolution-cache.tar.gz; fi
           if [ -f ~/stream.tar.gz ]; then tar xzf ~/stream.tar.gz; fi
+    - run: ./scripts/circleci_bench.sh
     - run: ./scripts/circleci_test.sh
     - run: ./scripts/circleci_repl.sh
     - run:
