@@ -165,6 +165,7 @@ class KryoAtomicCoderTest extends PipelineSpec {
   }
 
   it should "support kryo registrar with custom options" in {
+    implicit val recordBfallbackCoder = Coder.fallback[RecordB]
     // ensure we get a different kryo instance from object pool.
     val options = PipelineOptionsFactory
       .fromArgs("--kryoReferenceTracking=false", "--kryoRegistrationRequired=false")
