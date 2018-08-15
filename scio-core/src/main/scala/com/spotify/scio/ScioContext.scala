@@ -243,8 +243,8 @@ class ScioContext private[scio] (val options: PipelineOptions,
     VersionUtil.checkVersion()
     VersionUtil.checkRunnerVersion(options.getRunner)
     val o = optionsAs[ScioOptions]
-    o.setScalaVersion(scalaVersion)
-    o.setScioVersion(scioVersion)
+    o.setScalaVersion(BuildInfo.scalaVersion)
+    o.setScioVersion(BuildInfo.version)
   }
 
   {
@@ -409,8 +409,8 @@ class ScioContext private[scio] (val options: PipelineOptions,
 
     override def getMetrics: Metrics =
       Metrics(
-        scioVersion,
-        scalaVersion,
+        BuildInfo.version,
+        BuildInfo.scalaVersion,
         context.optionsAs[ApplicationNameOptions].getAppName,
         state.toString,
         getBeamMetrics)

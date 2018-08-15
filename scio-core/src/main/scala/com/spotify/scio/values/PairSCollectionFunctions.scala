@@ -27,6 +27,7 @@ import com.spotify.scio.ScioContext
 import com.spotify.scio.util._
 import com.spotify.scio.util.random.{BernoulliValueSampler, PoissonValueSampler}
 import com.twitter.algebird._
+import org.apache.beam.sdk.coders.KvCoder
 import org.apache.beam.sdk.transforms._
 import org.apache.beam.sdk.values.{KV, PCollection, PCollectionView}
 import org.slf4j.LoggerFactory
@@ -93,21 +94,35 @@ class PairSCollectionFunctions[K, V](val self: SCollection[(K, V)]) {
     context.wrap(o)
   }
 
-  private[values] def applyPerKey[UI, UO: Coder]
+  private[values] def applyPerKey[UI: Coder, UO: Coder]
   (t: PTransform[PCollection[KV[K, V]], PCollection[KV[K, UI]]], f: KV[K, UI] => (K, UO))(
     implicit koder: Coder[K], voder: Coder[V])
   : SCollection[(K, UO)] = {
     val o = self.applyInternal(new PTransform[PCollection[(K, V)], PCollection[(K, UO)]](null) {
-      override def expand(input: PCollection[(K, V)]): PCollection[(K, UO)] =
-        input
+      override def expand(input: PCollection[(K, V)]): PCollection[(K, UO)] = {
+        var kv = input
           .apply("TupleToKv", toKvTransform)
           .setCoder(Coder.kvCoder[K, V](context))
           .apply(t)
+        if (!kv.getCoder.isInstanceOf[KvCoder[_, _]]) {
+          kv = kv.setCoder(Coder.kvCoder[K, UI](context))
+        }
+        kv
           .apply("KvToTuple", ParDo.of(Functions.mapFn[KV[K, UI], (K, UO)](f)))
           .setCoder(Coder.beam(context, Coder[(K, UO)]))
-    })
+    }})
     context.wrap(o)
   }
+
+  /**
+    * Apply a [[org.apache.beam.sdk.transforms.DoFn DoFn]] that processes [[KV]]s and wrap the
+    * output in an [[SCollection]].
+    */
+  def applyPerKeyDoFn[U: Coder](t: DoFn[KV[K, V], KV[K, U]])(implicit koder: Coder[K], vcoder: Coder[V])
+  : SCollection[(K, U)] =
+    this.applyPerKey(
+      ParDo.of(t).asInstanceOf[PTransform[PCollection[KV[K, V]], PCollection[KV[K, U]]]],
+      TupleFunctions.kvToTuple[K, U])
 
   /**
    * Convert this SCollection to an [[SCollectionWithHotKeyFanout]] that uses an intermediate node
