@@ -31,7 +31,7 @@ val autoValueVersion = "1.4.1"
 val avroVersion = "1.8.2"
 val breezeVersion ="1.0-RC2"
 val chillVersion = "0.9.2"
-val circeVersion = "0.9.1"
+val circeVersion = "0.9.3"
 val commonsIoVersion = "2.6"
 val commonsMath3Version = "3.6.1"
 val elasticsearch2Version = "2.1.0"
@@ -65,7 +65,6 @@ val slf4jVersion = "1.7.25"
 val sparkeyVersion = "2.3.0"
 val tensorFlowVersion = "1.8.0"
 val zoltarVersion = "0.4.0"
-val bijectionVersion = "0.9.5"
 val magnoliaVersion = "0.10.1-SNAPSHOT"
 val grpcVersion = "1.7.0"
 
@@ -338,7 +337,6 @@ lazy val scioCore: Project = Project(
     "com.propensive" %% "magnolia" % magnoliaVersion,
     directRunnerDependency % "test",
     "org.scalatest" %% "scalatest" % scalatestVersion % "test",
-    "com.twitter" %% "bijection-core" % bijectionVersion,
     "org.hamcrest" % "hamcrest-all" % hamcrestVersion % "test",
     "io.grpc" % "grpc-all" % grpcVersion exclude("io.opencensus", "opencensus-api")
   )

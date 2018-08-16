@@ -30,14 +30,14 @@ def mkTypes(n):
     return ', '.join(mkVals(n))
 
 def mkBounds(n):
-    return ', '.join(x + ': Coder' for x in mkVals(n))
+    return ', '.join(x + ': Coder[' + x + ']' for x in mkVals(n))
 
 
 # Functions
 
 def tupleFns(out, n):
     types = mkTypes(n)
-    print >> out, '  implicit def tuple%sCoder[%s]: Coder[(%s)] = gen[(%s)]' % (n, mkBounds(n), types, types)
+    print >> out, '  implicit def tuple%sCoder[%s](implicit %s): Coder[(%s)] = gen[(%s)]' % (n, types, mkBounds(n), types, types)
 
 
 def main(out):

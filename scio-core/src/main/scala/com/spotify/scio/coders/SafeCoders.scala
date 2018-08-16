@@ -19,7 +19,6 @@ package com.spotify.scio.coders
 
 import java.io.{InputStream, OutputStream}
 import org.apache.beam.sdk.coders.{ Coder => BCoder, _}
-import com.twitter.bijection._
 import scala.reflect.{ClassTag, classTag}
 import scala.collection.{ mutable => m }
 
@@ -39,41 +38,6 @@ final class AvroRawCoder[T](@transient var schema: org.apache.avro.Schema) exten
 
   def decode(is: InputStream): T =
     decoder.decode(is)
-}
-
-//
-// Derive Coder from twitter Bijection
-//
-final class CollectionfromBijection[A, B](
-  b: Bijection[Seq[A], B], c: BCoder[Seq[A]]) extends AtomicCoder[B] {
-    def encode(ts: B, out: OutputStream): Unit =
-      c.encode(b.invert(ts), out)
-    def decode(in: InputStream): B =
-      b(c.decode(in))
-}
-
-final class MapfromBijection[K, A, B](
-  b: Bijection[Map[K, A], B], c: BCoder[Map[K, A]]) extends AtomicCoder[B] {
-    def encode(ts: B, out: OutputStream): Unit =
-      c.encode(b.invert(ts), out)
-    def decode(in: InputStream): B =
-      b(c.decode(in))
-}
-
-sealed trait FromBijection {
-  implicit def collectionfromBijection[A, B](
-    implicit b: Bijection[Seq[A], B], //TODO: should I use ImplicitBijection ?
-             c: Coder[Seq[A]]): Coder[B] =
-    Coder.transform(c) { ca =>
-      Coder.beam(new CollectionfromBijection[A, B](b, ca))
-    }
-
-  implicit def mapfromBijection[K, A, B](
-    implicit b: Bijection[Map[K, A], B], //TODO: should I use ImplicitBijection ?
-             c: Coder[Map[K, A]]): Coder[B] =
-    Coder.transform(c) { cm =>
-      Coder.beam(new MapfromBijection[K, A, B](b, cm))
-    }
 }
 
 private final object Derived extends Serializable {
@@ -190,7 +154,7 @@ sealed trait ProtobufCoders {
 // Java Coders
 //
 trait JavaCoders {
-  self: BaseCoders with FromBijection =>
+  self: BaseCoders =>
 
   implicit def uriCoder: Coder[java.net.URI] =
     Coder.xmap(Coder.beam(StringUtf8Coder.of()))(s => new java.net.URI(s), _.toString)
@@ -204,10 +168,16 @@ trait JavaCoders {
       Coder.beam(org.apache.beam.sdk.coders.IterableCoder.of(bc))
     }
 
-  // Could be derived from Bijection but since it's a very common one let's just support it.
   implicit def jlistCoder[T](implicit c: Coder[T]): Coder[java.util.List[T]] =
     Coder.transform(c) { bc =>
       Coder.beam(org.apache.beam.sdk.coders.ListCoder.of(bc))
+    }
+
+  implicit def jMapCoder[K, V](implicit ck: Coder[K], cv: Coder[V]): Coder[java.util.Map[K, V]] =
+    Coder.transform(ck) { bk =>
+      Coder.transform(cv) { bv =>
+        Coder.beam(org.apache.beam.sdk.coders.MapCoder.of(bk, bv))
+      }
     }
 
   private def fromScalaCoder[J <: java.lang.Number, S <: AnyVal](coder: Coder[S]): Coder[J] =
@@ -245,6 +215,7 @@ trait AlgebirdCoders {
   implicit def cmsCoder[K]: Coder[CMS[K]] = Coder.fallback
   implicit def bfCoder[K]: Coder[BF[K]] = Coder.fallback
   implicit def topKCoder[K]: Coder[TopK[K]] = Coder.fallback
+  implicit def batchedCoder[U]: Coder[Batched[U]] = Coder.fallback
 }
 
 private final object UnitCoder extends AtomicCoder[Unit]{
@@ -325,6 +296,14 @@ private class ArrayBufferCoder[T](c: BCoder[T]) extends AtomicCoder[m.ArrayBuffe
     m.ArrayBuffer(seqCoder.decode(is):_*)
 }
 
+private class SetCoder[T](c: BCoder[T]) extends AtomicCoder[Set[T]] {
+  val seqCoder = new SeqCoder[T](c)
+  def encode(value: Set[T], os: OutputStream): Unit =
+    seqCoder.encode(value.toSeq, os)
+  def decode(is: InputStream): Set[T] =
+    Set(seqCoder.decode(is):_*)
+}
+
 private class MapCoder[K, V](kc: BCoder[K], vc: BCoder[V]) extends AtomicCoder[Map[K, V]] {
   val lc = VarIntCoder.of()
   def decode(in: InputStream): Map[K, V] = {
@@ -386,11 +365,14 @@ sealed trait BaseCoders {
   implicit def iterableCoder[T: Coder]: Coder[Iterable[T]] =
     Coder.transform(Coder[T]){ bc => Coder.beam(new IterableCoder[T](bc)) }
 
-  // implicit def throwableCoder: Coder[Throwable] = ???
+  implicit def throwableCoder[T <: Throwable : ClassTag]: Coder[T] = Coder.fallback[T]
 
   // specialized coder. Since `::` is a case class, Magnolia would derive an incorrect one...
   implicit def listCoder[T: Coder]: Coder[List[T]] =
     Coder.transform(Coder[T]){ bc => Coder.beam(new ListCoder[T](bc)) }
+
+  implicit def setCoder[T: Coder]: Coder[Set[T]] =
+    Coder.transform(Coder[T]){ bc => Coder.beam(new SetCoder[T](bc)) }
 
   implicit def vectorCoder[T: Coder]: Coder[Vector[T]] =
     Coder.transform(Coder[T]){ bc => Coder.beam(new VectorCoder[T](bc)) }
@@ -429,7 +411,6 @@ sealed trait BaseCoders {
 trait Implicits
 //   with FromSerializable
   extends BaseCoders
-  with FromBijection
   with AvroCoders
   with ProtobufCoders
   with JavaCoders

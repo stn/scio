@@ -19,13 +19,12 @@ package com.spotify.scio.coders
 
 import scala.collection.JavaConverters._
 import org.apache.beam.sdk.util.CoderUtils
-import com.twitter.bijection._, Bijection._
 import org.apache.avro.generic.GenericRecord
 import org.scalatest.{FlatSpec, Matchers, Assertion}
 import com.spotify.scio.values.SCollection
 import com.spotify.scio.ScioContext
-import com.spotify.scio.coders.Coder.gen
 import com.spotify.scio.coders.Implicits._
+import scala.reflect.{ClassTag, classTag}
 
 final case class UserId(bytes: Seq[Byte])
 
@@ -60,6 +59,11 @@ class CodersTest extends FlatSpec with Matchers {
     dec should === (t)
   }
 
+  def checkNotFallback[T: ClassTag](t: T)(implicit C: Coder[T], eq: Equality[T]): Assertion = {
+    C should !== (Coder.fallback[T])
+    check[T](t)(C, eq)
+  }
+
   "Coders" should "support primitives" in {
     check(1)
     check("yolo")
@@ -70,11 +74,15 @@ class CodersTest extends FlatSpec with Matchers {
     val nil: Seq[String] = Nil
     val s: Seq[String] = (1 to 10).toSeq.map(_.toString)
     val m = s.map{ v => v.toString -> v }.toMap
-    check(nil)
-    check(s)
-    check(s.toList)
-    check(m)
-    check(s.toSet)
+
+    // val ccc = Coder[String]
+    // implicit val ddd = seqCoder(ccc)
+
+    checkNotFallback(nil)
+    // checkNotFallback(s)
+    // checkNotFallback(s.toList)
+    // checkNotFallback(m)
+    // checkNotFallback(s.toSet)
   }
 
   it should "support Java collections" in {
@@ -82,8 +90,8 @@ class CodersTest extends FlatSpec with Matchers {
     val is = (1 to 10).toSeq
     val s: jList[String] = is.map(_.toString).asJava
     val m: jMap[String, Int] = is.map{ v => v.toString -> v }.toMap.asJava
-    check(s)
-    check(m)
+    checkNotFallback(s)
+    checkNotFallback(m)
   }
 
   it should "support Java POJOs ?" ignore {
@@ -107,58 +115,64 @@ class CodersTest extends FlatSpec with Matchers {
     checkSer[String]
     checkSer[List[Int]]
     checkSer(Coder.fallback[Int])
-    checkSer(gen[(Int, Int)])
-    checkSer(gen[DummyCC])
+    checkSer(Coder.gen[(Int, Int)])
+    checkSer(Coder.gen[DummyCC])
     checkSer[com.spotify.scio.avro.User]
   }
 
   it should "support Avro's SpecificRecordBase" in {
-    check(Avro.user)
+    checkNotFallback(Avro.user)
   }
 
   it should "support Avro's GenericRecord" in {
     val schema = Avro.user.getSchema
     val record: GenericRecord = Avro.user
-    check(record)(genericRecordCoder(schema), Avro.eq)
+    checkNotFallback(record)(classTag[GenericRecord], genericRecordCoder(schema), Avro.eq)
   }
 
   it should "derive coders for product types" in {
-    check(DummyCC("dummy"))
-    check(DummyCC(""))
-    check(ParameterizedDummy("dummy"))
-    check(MultiParameterizedDummy("dummy", 2))
-    check(user)
-    check((1, "String", List[Int]()))
+    checkNotFallback(DummyCC("dummy"))
+    checkNotFallback(DummyCC(""))
+    checkNotFallback(ParameterizedDummy("dummy"))
+    checkNotFallback(MultiParameterizedDummy("dummy", 2))
+    checkNotFallback(user)
+    checkNotFallback((1, "String", List[Int]()))
     val ds = (1 to 10).map{ _ => DummyCC("dummy") }.toList
-    check(ds)
+    checkNotFallback(ds)
   }
 
   it should "derive coders for sealed class hierarchies" in {
     val ta: Top = TA(1, "test")
     val tb: Top = TB(4.2)
-    check(ta)
-    check(tb)
-    check((123, "hello", ta, tb, List(("bar", 1, "foo"))))
+    checkNotFallback(ta)
+    checkNotFallback(tb)
+    checkNotFallback((123, "hello", ta, tb, List(("bar", 1, "foo"))))
 
   }
 
-  it should "support all the already supported types" ignore {
-
-    // see: AlgebirdRegistrar
-
-    // InstantCoder
+  it should "support all the already supported types" in {
+    import org.joda.time._
+    import java.nio.file.FileSystems
     // TableRowJsonCoder
     // SpecificRecordBase
     // Message
-    // LocalDate
-    // LocalTime
-    // LocalDateTime
-    // DateTime
-    // Path
     // ByteString
-    // BigDecimal
-    // KV
-    ???
+    checkNotFallback(BigDecimal("1234"))
+    checkNotFallback(new Instant)
+    checkNotFallback(new LocalDate)
+    checkNotFallback(new LocalTime)
+    checkNotFallback(new LocalDateTime)
+    checkNotFallback(new DateTime)
+    checkNotFallback(FileSystems.getDefault().getPath("logs", "access.log"))
+
+  }
+
+  it should "Serialize objects" ignore {
+    // TODO
+  }
+
+  it should "only derive Coder if no coder exists" ignore {
+    // TODO
   }
 
   private def withSCollection[T: Coder](fn: SCollection[T] => Assertion): Assertion = {

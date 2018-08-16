@@ -105,15 +105,17 @@ private[scio] object CoderUtils {
 
     (verbose, alreadyReported) match {
       case _ if implicitFound =>
-        fallback
-      case (true, false) =>
-        c.echo(c.enclosingPosition, longMessage.stripMargin)
-        verbose = false
-        fallback
+        c.abort(c.enclosingPosition,
+          s"A proper implicit was found for $wtt")
       case (false, false) =>
         c.echo(c.enclosingPosition, shortMessage.stripMargin)
         fallback
+      case (true, _) =>
+        c.echo(c.enclosingPosition, longMessage.stripMargin)
+        verbose = false
+        fallback
       case (_, _) =>
+        c.echo(c.enclosingPosition, s"Using fallback for $wtt")
         fallback
     }
   }
@@ -157,7 +159,6 @@ private[scio] object CoderUtils {
             case Apply(AppliedTypeTree(Select(pack, TypeName("CaseClass")), ps), List(typeName, isObject, isValueClass, params, annotations)) =>
               Apply(AppliedTypeTree(Select(pack, TypeName("CaseClass")), ps), List(typeName, isObject, isValueClass, params, q"""Array()"""))
             case q"""new magnolia.CaseClass[$tc, $t]($typeName, $isObject, $isValueClass, $params, $annotations){ $body }""" =>
-              println(s"match CaseClass => \n $tree")
               q"""_root_.magnolia.CaseClass[$tc, $t]($typeName, $isObject, $isValueClass, $params, Array()){ $body }"""
             case q"com.spotify.scio.coders.Coder.dispatch(new magnolia.SealedTrait($name, $subtypes, $annotations))" =>
               q"_root_.com.spotify.scio.coders.Coder.dispatch(new magnolia.SealedTrait($name, $subtypes, Array()))"

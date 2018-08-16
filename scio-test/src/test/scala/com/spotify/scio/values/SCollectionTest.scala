@@ -64,22 +64,6 @@ class SCollectionTest extends PipelineSpec {
     }
   }
 
-  // Wont compile anymore
-  /*
-  it should "fail applyTransform() with KV output" in {
-    // scalastyle:off no.whitespace.before.left.bracket
-    val e = the [IllegalArgumentException] thrownBy {
-      runWithContext { sc =>
-        val p = sc.parallelize(Seq(1, 2, 3, 4, 5)).applyTransform(ParDo.of(newKvDoFn))
-      }
-    }
-    val msg = "requirement failed: Applying a transform with KV[K, V] output, " +
-      "use applyKvTransform instead"
-    e.getMessage shouldBe msg
-    // scalastyle:on no.whitespace.before.left.bracket
-  }
-  */
-
   it should "support applyKvTransform()" in {
     runWithContext { sc =>
       val p = sc.parallelize(Seq(1, 2, 3, 4, 5))
