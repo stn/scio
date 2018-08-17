@@ -628,14 +628,15 @@ sealed trait SCollection[T] extends PCollectionWrapper[T] {
    * right side should be tiny and fit in memory.
    * @group hash
    */
-  def cross[U: Coder](that: SCollection[U])(implicit tcoder: Coder[T]): SCollection[(T, U)] = this.transform { in =>
-    // TODO: switch to ListSideInput when https://github.com/spotify/scio/issues/1152 is resolved
-    val side = that.aggregate(Aggregator.toList[U]).asSingletonSideInput
-    in
-      .withSideInputs(side)
-      .flatMap((t, s) => s(side).map((t, _)))
-      .toSCollection
-  }
+  def cross[U: Coder](that: SCollection[U])(implicit tcoder: Coder[T]): SCollection[(T, U)] =
+    this.transform { in =>
+      // TODO: switch to ListSideInput when https://github.com/spotify/scio/issues/1152 is resolved
+      val side = that.aggregate(Aggregator.toList[U]).asSingletonSideInput
+      in
+        .withSideInputs(side)
+        .flatMap((t, s) => s(side).map((t, _)))
+        .toSCollection
+    }
 
   /**
    * Look up values in an `SCollection[(T, V)]` for each element `T` in this SCollection by

@@ -68,7 +68,8 @@ class PairHashSCollectionFunctions[K, V](val self: SCollection[(K, V)]) {
     *
     * @group join
     */
-  def hashFullOuterJoin[W: Coder](that: SCollection[(K, W)])(implicit koder: Coder[K], voder: Coder[V])
+  def hashFullOuterJoin[W: Coder](
+    that: SCollection[(K, W)])(implicit koder: Coder[K], voder: Coder[V])
   : SCollection[(K, (Option[V], Option[W]))] = self.transform { in =>
     val side = combineAsMapSideInput(that)
 

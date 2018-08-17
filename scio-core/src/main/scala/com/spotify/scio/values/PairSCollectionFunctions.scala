@@ -118,7 +118,8 @@ class PairSCollectionFunctions[K, V](val self: SCollection[(K, V)]) {
     * Apply a [[org.apache.beam.sdk.transforms.DoFn DoFn]] that processes [[KV]]s and wrap the
     * output in an [[SCollection]].
     */
-  def applyPerKeyDoFn[U: Coder](t: DoFn[KV[K, V], KV[K, U]])(implicit koder: Coder[K], vcoder: Coder[V])
+  def applyPerKeyDoFn[U: Coder](
+    t: DoFn[KV[K, V], KV[K, U]])(implicit koder: Coder[K], vcoder: Coder[V])
   : SCollection[(K, U)] =
     this.applyPerKey(
       ParDo.of(t).asInstanceOf[PTransform[PCollection[KV[K, V]], PCollection[KV[K, U]]]],

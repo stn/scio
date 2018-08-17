@@ -172,8 +172,9 @@ package object avro {
   object ParquetAvroFile {
     implicit def parquetAvroFileToSCollection[T: Coder](self: ParquetAvroFile[T])
     : SCollection[T] = self.toSCollection
-    implicit def parquetAvroFileToParquetAvroSCollection[T: ClassTag : Coder](self: ParquetAvroFile[T])
-    : ParquetAvroSCollection[T] = new ParquetAvroSCollection(self.toSCollection)
+    implicit def parquetAvroFileToParquetAvroSCollection[T: ClassTag : Coder](
+      self: ParquetAvroFile[T]): ParquetAvroSCollection[T] =
+        new ParquetAvroSCollection(self.toSCollection)
   }
 
   /**
