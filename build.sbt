@@ -30,7 +30,7 @@ val autoServiceVersion = "1.0-rc3"
 val autoValueVersion = "1.4.1"
 val avroVersion = "1.8.2"
 val breezeVersion ="1.0-RC2"
-val chillVersion = "0.9.2"
+val chillVersion = "0.9.3"
 val circeVersion = "0.9.3"
 val commonsIoVersion = "2.6"
 val commonsMath3Version = "3.6.1"
@@ -67,6 +67,7 @@ val tensorFlowVersion = "1.8.0"
 val zoltarVersion = "0.4.0"
 val magnoliaVersion = "0.10.1-SNAPSHOT"
 val grpcVersion = "1.7.0"
+val caseappVersion = "2.0.0-M3"
 
 lazy val mimaSettings = Seq(
   mimaPreviousArtifacts :=
@@ -338,7 +339,8 @@ lazy val scioCore: Project = Project(
     directRunnerDependency % "test",
     "org.scalatest" %% "scalatest" % scalatestVersion % "test",
     "org.hamcrest" % "hamcrest-all" % hamcrestVersion % "test",
-    "io.grpc" % "grpc-all" % grpcVersion exclude("io.opencensus", "opencensus-api")
+    "io.grpc" % "grpc-all" % grpcVersion exclude("io.opencensus", "opencensus-api"),
+    "com.github.alexarchambault" %% "case-app" % caseappVersion
   )
 ).dependsOn(
   scioAvro,
@@ -360,6 +362,7 @@ lazy val scioTest: Project = Project(
     "org.scalatest" %% "scalatest" % scalatestVersion,
     "org.scalacheck" %% "scalacheck" % scalacheckVersion % "test,it",
     "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % scalacheckShapelessVersion % "test,it",
+    "me.lyh" %% "shapeless-datatype-datastore_1.3" % shapelessDatatypeVersion % "test,it",
     // DataFlow testing requires junit and hamcrest
     "org.hamcrest" % "hamcrest-all" % hamcrestVersion,
     "com.spotify" % "annoy" % annoyVersion % "test",
@@ -437,8 +440,10 @@ lazy val scioCassandra2: Project = Project(
   commonSettings ++ itSettings,
   description := "Scio add-on for Apache Cassandra 2.x",
   libraryDependencies ++= Seq(
-    "com.datastax.cassandra" % "cassandra-driver-core" % "2.1.10.3",
-    "org.apache.cassandra" % "cassandra-all" % "2.0.17",
+    "com.datastax.cassandra" % "cassandra-driver-core" % "3.5.1",
+    ("org.apache.cassandra" % "cassandra-all" % "2.2.12")
+      .exclude("ch.qos.logback", "logback-classic")
+      .exclude("org.slf4j", "log4j-over-slf4j"),
     "org.apache.hadoop" % "hadoop-client" % hadoopVersion
   )
 ).dependsOn(
@@ -453,8 +458,8 @@ lazy val scioCassandra3: Project = Project(
   commonSettings ++ itSettings,
   description := "Scio add-on for Apache Cassandra 3.x",
   libraryDependencies ++= Seq(
-    "com.datastax.cassandra" % "cassandra-driver-core" % "3.2.0",
-    ("org.apache.cassandra" % "cassandra-all" % "3.11.0")
+    "com.datastax.cassandra" % "cassandra-driver-core" % "3.5.1",
+    ("org.apache.cassandra" % "cassandra-all" % "3.11.2")
       .exclude("ch.qos.logback", "logback-classic")
       .exclude("org.slf4j", "log4j-over-slf4j"),
     "org.apache.hadoop" % "hadoop-client" % hadoopVersion,

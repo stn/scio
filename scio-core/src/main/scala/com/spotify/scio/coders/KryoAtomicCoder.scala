@@ -112,7 +112,6 @@ private final class ScioKryoRegistrar extends IKryoRegistrar {
     k.forSubclass[DateTime](new JodaDateTimeSerializer)
     k.forSubclass[Path](new JPathSerializer)
     k.forSubclass[ByteString](new ByteStringSerializer)
-    k.forClass(new BigDecimalSerializer)
     k.forClass(new KVSerializer)
     // TODO:
     // TimestampedValueCoder

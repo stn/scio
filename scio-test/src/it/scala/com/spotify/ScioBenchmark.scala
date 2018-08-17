@@ -24,6 +24,8 @@ import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.json.jackson2.JacksonFactory
 import com.google.api.services.dataflow.{Dataflow, DataflowScopes}
 import com.google.common.reflect.ClassPath
+import com.google.datastore.v1._
+import com.google.datastore.v1.client.DatastoreHelper
 import com.spotify.scio._
 import com.spotify.scio.runners.dataflow.DataflowResult
 import com.spotify.scio.values.SCollection
@@ -32,18 +34,21 @@ import org.apache.beam.runners.dataflow.DataflowPipelineJob
 import org.apache.beam.sdk.transforms.DoFn.ProcessElement
 import org.apache.beam.sdk.transforms.{DoFn, ParDo}
 import org.joda.time.format.{DateTimeFormat, ISODateTimeFormat, PeriodFormat}
-import org.joda.time.{DateTimeZone, Seconds}
+import org.joda.time.{DateTimeZone, Instant, Seconds}
+import shapeless.datatype.datastore._
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
 import scala.util.Random
 
-// This file is symlinked to scio-test/src/it/scala/com/spotify/ScioBenchmark.scala so that it can
-// run on HEAD. Keep all changes contained in the same file.
+import com.spotify.scio.coders.Implicits._
+
+// This file is symlinked to scio-bench/src/main/scala/com/spotify/ScioBenchmark.scala so that it
+// can run with past Scio releases.
 
 object ScioBenchmarkSettings {
-  val defaultProjectId: String = "scio-playground"
+  val defaultProjectId: String = "data-integration-test"
   val numOfWorkers = 4
   val commonArgs = Array(
     "--runner=DataflowRunner",
@@ -54,10 +59,16 @@ object ScioBenchmarkSettings {
   val shuffleConf = Map("ShuffleService" -> Array("--experiments=shuffle_mode=service"))
 }
 
+// scalastyle:off number.of.types
 // scalastyle:off number.of.methods
 object ScioBenchmark {
 
   import ScioBenchmarkSettings._
+
+  case class CircleCIEnv(buildNum: Long, gitHash: String)
+  case class ScioBenchmarkRun(timestamp: Instant,
+                              gitHash: String, buildNum: Long, operation: String)
+  case class OperationBenchmark(opName: String, metrics: Map[String, String])
 
   private val dataflow = {
     val transport = GoogleNetHttpTransport.newTrustedTransport()
@@ -67,12 +78,35 @@ object ScioBenchmark {
     new Dataflow.Builder(transport, jackson, credential).build()
   }
 
+  private val datastore = DatastoreHelper.getDatastoreFromEnv
+
+  private val datastoreKind = "Benchmarks"
+
+  private lazy val datastoreMetricKeys = Set("Elapsed", "TotalMemoryUsage", "TotalPdUsage",
+    "TotalShuffleDataProcessed", "TotalSsdUsage", "TotalStreamingDataProcessed", "TotalVcpuTime")
+
+  private val circleCIEnv: Option[CircleCIEnv] = {
+    val isCircleCIRun = sys.env.get("CIRCLECI").contains("true")
+
+    if (isCircleCIRun) {
+      (sys.env.get("CIRCLE_BUILD_NUM"), sys.env.get("CIRCLE_SHA1")) match {
+        case (Some(buildNumber), Some(gitHash)) =>
+          Some(CircleCIEnv(buildNumber.toLong, gitHash))
+        case _ => throw new IllegalStateException("CIRCLECI env variable is set but not " +
+          "CIRCLE_BUILD_NUM and CIRCLE_SHA1")
+      }
+    } else {
+      prettyPrint("CircleCI", "CIRCLECI env variable not found. Will not publish " +
+        "benchmark results to Datastore.")
+      None
+    }
+  }
+
   def main(args: Array[String]): Unit = {
     val argz = Args(args)
     val name = argz("name")
     val regex = argz.getOrElse("regex", ".*")
     val projectId = argz.getOrElse("project", ScioBenchmarkSettings.defaultProjectId)
-
     val timestamp = DateTimeFormat.forPattern("yyyyMMddHHmmss")
       .withZone(DateTimeZone.UTC)
       .print(System.currentTimeMillis())
@@ -86,7 +120,7 @@ object ScioBenchmark {
     Await.result(future, Duration.Inf)
 
     // scalastyle:off regex
-    results.foreach { r =>
+    val metrics = results.map { r =>
       println("=" * 80)
       prettyPrint("Benchmark", r.name)
       prettyPrint("Extra arguments", r.extraArgs.mkString(" "))
@@ -99,23 +133,112 @@ object ScioBenchmark {
       prettyPrint("Finish time", job.getCurrentStateTime)
       val start = parser.parseLocalDateTime(job.getCreateTime)
       val finish = parser.parseLocalDateTime(job.getCurrentStateTime)
-      val elapsed = PeriodFormat.getDefault.print(Seconds.secondsBetween(start, finish))
-      prettyPrint("Elapsed", elapsed)
+      val elapsed = Seconds.secondsBetween(start, finish)
+      prettyPrint("Elapsed", PeriodFormat.getDefault.print(elapsed))
 
-      r.result.as[DataflowResult].getJobMetrics.getMetrics.asScala
+      val jobMetrics = r.result.as[DataflowResult].getJobMetrics.getMetrics.asScala
         .filter { m =>
           m.getName.getName.startsWith("Total") && !m.getName.getContext.containsKey("tentative")
         }
         .map(m => (m.getName.getName, m.getScalar.toString))
         .sortBy(_._1)
-        .foreach(kv => prettyPrint(kv._1, kv._2))
+
+      jobMetrics.foreach(kv => prettyPrint(kv._1, kv._2))
+      OperationBenchmark(r.name,
+        jobMetrics.filter(metric => datastoreMetricKeys.contains(metric._1)).toMap +
+          ("Elapsed" -> elapsed.getSeconds.toString))
+    }
+    if (circleCIEnv.isDefined) {
+      saveMetricsToDatastore(circleCIEnv.get, metrics)
     }
     // scalastyle:on regex
   }
 
+  // scalastyle:off regex
+  // Save metrics to integration testing Datastore instance. Can't make this into a
+  // transaction because DS limit is 25 entities per transaction.
+  private def saveMetricsToDatastore(circleCIEnv: CircleCIEnv,
+                                     benchmarks: Iterable[OperationBenchmark]): Unit = {
+    prettyPrint("CircleCI", s"Saving metrics for $circleCIEnv to Datastore...")
+
+    val now = new Instant()
+    val dt = DatastoreType[ScioBenchmarkRun]
+
+    benchmarks.foreach { benchmark =>
+      val entity = dt
+        .toEntityBuilder(
+          ScioBenchmarkRun(now, circleCIEnv.gitHash, circleCIEnv.buildNum, benchmark.opName))
+        .setKey(DatastoreHelper.makeKey(
+          s"${datastoreKind}_${benchmark.opName}", circleCIEnv.buildNum.toString))
+
+      benchmark.metrics.foreach { metric =>
+        entity.putProperties(metric._1, DatastoreHelper.makeValue(metric._2).build())
+      }
+
+      try {
+        datastore.commit(CommitRequest.newBuilder()
+          .setMode(CommitRequest.Mode.NON_TRANSACTIONAL)
+          // Upsert means we can re-run a job for same build if necessary; insert would trigger
+          // a Datastore exception
+          .addMutations(Mutation.newBuilder().setUpsert(entity.build()).build())
+          .build())
+      } catch {
+        case e: Exception =>
+          println("Caught exception committing to Datastore. Metrics may not have been " +
+            s"published for operation ${benchmark.opName}")
+          e.printStackTrace()
+      }
+    }
+
+    printMetricsComparison(benchmarks.map(_.opName))
+  }
+
+  private val getBenchmarkQuery =
+    s"SELECT * from ${datastoreKind}_%s ORDER BY buildNum DESC LIMIT 2"
+
+  // TODO: move this to email generator
+  private def printMetricsComparison(benchmarkNames: Iterable[String]): Unit = {
+    benchmarkNames.foreach { benchmarkName =>
+      try {
+        val comparisonMetrics = datastore.runQuery(
+          RunQueryRequest.newBuilder().setGqlQuery(
+            GqlQuery.newBuilder()
+              .setAllowLiterals(true)
+              .setQueryString(getBenchmarkQuery.format(benchmarkName))
+              .build()
+          ).build())
+
+        val metrics = comparisonMetrics.getBatch.getEntityResultsList.asScala
+          .sortBy(_.getEntity.getKey.getPath(0).getName.toInt)
+          .map(_.getEntity)
+        if (metrics.size == 2) {
+          val opName = metrics.head.getKey.getPath(0).getKind.substring(datastoreKind.length + 1)
+          val props = metrics.map(_.getPropertiesMap.asScala)
+          println("=" * 80)
+          prettyPrint("Benchmark", opName)
+          val List(b1, b2) = props.map(_("buildNum").getIntegerValue).toList
+          prettyPrint("BuildNum", "%15d%15d%15s".format(b1, b2, "Delta"))
+          datastoreMetricKeys.foreach { k =>
+            val List(prev, curr) = props.map(_(k).getStringValue.toDouble).toList
+            val delta = (curr - prev).toDouble / curr * 100.0
+            val signed = if (delta.isNaN) {
+              "0.00%"
+            } else {
+              (if (delta > 0) "+" else "") + "%.2f%%".format(delta)
+            }
+            prettyPrint(k, "%15.2f%15.2f%15s".format(prev, curr, signed))
+          }
+        }
+      } catch {
+        case e: Exception => println(s"Caught error fetching benchmark metrics from Datastore: $e")
+      }
+    }
+  }
+  // scalastyle:on regex
+
   private def prettyPrint(k: String, v: String): Unit = {
     // scalastyle:off regex
-    println("%-20s: %s".format(k, v))
+    println("%-30s: %s".format(k, v))
     // scalastyle:on regex
   }
 
@@ -188,7 +311,7 @@ object ScioBenchmark {
 
   object FoldMonoid extends Benchmark {
     override def run(sc: ScioContext): Unit =
-    randomUUIDs(sc, 100 * M).map(_.hashCode % 1000).map(Set(_)).fold
+      randomUUIDs(sc, 100 * M).map(_.hashCode % 1000).map(Set(_)).fold
   }
 
   object Aggregate extends Benchmark {
@@ -373,14 +496,14 @@ object ScioBenchmark {
 
   private def randomUUIDs(sc: ScioContext, n: Long): SCollection[Elem[String]] =
     sc.parallelize(partitions(n))
-      .flatten
+      .flatten[Long]
       .applyTransform(ParDo.of(new FillDoFn(() => UUID.randomUUID().toString)))
       .map(Elem(_))
 
   private def randomKVs(sc: ScioContext,
                         n: Long, numUniqueKeys: Int): SCollection[(String, Elem[String])] =
     sc.parallelize(partitions(n))
-      .flatten
+      .flatten[Long]
       .applyTransform(ParDo.of(new FillDoFn(() =>
         ("key" + Random.nextInt(numUniqueKeys), UUID.randomUUID().toString)
       )))
@@ -400,3 +523,4 @@ object ScioBenchmark {
 
 }
 // scalastyle:on number.of.methods
+// scalastyle:on number.of.types

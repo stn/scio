@@ -264,6 +264,14 @@ private class ListCoder[T](bc: BCoder[T]) extends AtomicCoder[List[T]] {
     seqCoder.decode(is).toList
 }
 
+private class TraversableOnceCoder[T](bc: BCoder[T]) extends AtomicCoder[TraversableOnce[T]] {
+  val seqCoder = new SeqCoder[T](bc)
+  def encode(value: TraversableOnce[T], os: OutputStream): Unit =
+    seqCoder.encode(value.toSeq, os)
+  def decode(is: InputStream): TraversableOnce[T] =
+    seqCoder.decode(is)
+}
+
 private class IterableCoder[T](bc: BCoder[T]) extends AtomicCoder[Iterable[T]] {
   val seqCoder = new SeqCoder[T](bc)
   def encode(value: Iterable[T], os: OutputStream): Unit =
@@ -371,6 +379,9 @@ sealed trait BaseCoders {
   implicit def listCoder[T: Coder]: Coder[List[T]] =
     Coder.transform(Coder[T]){ bc => Coder.beam(new ListCoder[T](bc)) }
 
+  implicit def traversableOnceCoder[T: Coder]: Coder[TraversableOnce[T]] =
+    Coder.transform(Coder[T]){ bc => Coder.beam(new TraversableOnceCoder[T](bc)) }
+
   implicit def setCoder[T: Coder]: Coder[Set[T]] =
     Coder.transform(Coder[T]){ bc => Coder.beam(new SetCoder[T](bc)) }
 
@@ -409,7 +420,6 @@ sealed trait BaseCoders {
 }
 
 trait Implicits
-//   with FromSerializable
   extends BaseCoders
   with AvroCoders
   with ProtobufCoders
