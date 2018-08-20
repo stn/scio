@@ -21,7 +21,7 @@ import java.lang.{Iterable => JIterable}
 import java.util.{List => JList}
 
 import com.google.common.collect.Lists
-import com.spotify.scio.coders.Coder
+import com.spotify.scio.coders.{Coder, CoderMaterializer}
 import com.spotify.scio.coders.Implicits._
 import org.apache.beam.sdk.coders.{CoderRegistry, Coder => BCoder}
 import org.apache.beam.sdk.transforms.Combine.CombineFn
@@ -43,11 +43,11 @@ private[scio] object Functions {
     val vocoder: Coder[VO]
 
     override def getAccumulatorCoder(registry: CoderRegistry, inputCoder: BCoder[VI]): BCoder[VA] =
-      Coder.beamWithDefault(vacoder, registry)
+      CoderMaterializer.beamWithDefault(vacoder, registry)
 
     override def getDefaultOutputCoder(
       registry: CoderRegistry, inputCoder: BCoder[VI]): BCoder[VO] =
-      Coder.beamWithDefault(vocoder, registry)
+      CoderMaterializer.beamWithDefault(vocoder, registry)
   }
 
   def aggregateFn[T: Coder, U: Coder](zeroValue: U)(seqOp: (U, T) => U, combOp: (U, U) => U)

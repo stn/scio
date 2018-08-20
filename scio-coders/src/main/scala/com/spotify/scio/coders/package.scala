@@ -19,8 +19,7 @@ package com.spotify.scio.coders
 
 import java.io.{InputStream, OutputStream}
 import scala.annotation.implicitNotFound
-import org.apache.beam.sdk.coders.{Coder => BCoder, KvCoder, AtomicCoder}
-import com.spotify.scio.ScioContext
+import org.apache.beam.sdk.coders.{Coder => BCoder, AtomicCoder}
 import scala.reflect.ClassTag
 import scala.language.higherKinds
 
@@ -34,7 +33,7 @@ Cannot find a Coder instance for type:
   some debugging hints:
     - Make sure you imported com.spotify.scio.coders.Implicits._
     - If you can't annotate the definition, you can also generate a Coder using
-        implicit val someClassCoder = com.spotify.scio.coders.Implicits.gen[SomeCaseClass]
+        implicit val someClassCoder = com.spotify.scio.coders.Coder.gen[SomeCaseClass]
     - For Option types, ensure that a Coder instance is in scope for the non-Option version.
     - For List and Seq types, ensure that a Coder instance is in scope for a single element.
     - You can check that an instance exists for Coder in the REPL or in your code:
@@ -119,13 +118,6 @@ private class RecordCoder[T: ClassTag](
 }
 
 sealed trait CoderGrammar {
-  import org.apache.beam.sdk.coders.CoderRegistry
-  import org.apache.beam.sdk.options.PipelineOptions
-  import org.apache.beam.sdk.options.PipelineOptionsFactory
-
-  def clean[T](w: BCoder[T]): BCoder[T] =
-    com.spotify.scio.util.ClosureCleaner.clean(w).asInstanceOf[BCoder[T]]
-
   def beam[T](beam: BCoder[T]): Coder[T] =
     Beam(beam)
   def fallback[T](implicit ct: ClassTag[T]): Coder[T] =
@@ -146,34 +138,6 @@ sealed trait CoderGrammar {
   }
   private[scio] def sequence[T](cs: Array[(String, Coder[T])]): Coder[Array[T]] =
     Record(cs)
-
-  def beam[T](sc: ScioContext, c: Coder[T]): BCoder[T] =
-    beam(sc.pipeline.getCoderRegistry, sc.options, c)
-
-  def beamWithDefault[T](
-    coder: Coder[T],
-    r: CoderRegistry = CoderRegistry.createDefault(),
-    o: PipelineOptions = PipelineOptionsFactory.create()): BCoder[T] =
-      beam(r, o, coder)
-
-  final def beam[T](r: CoderRegistry, o: PipelineOptions, c: Coder[T]): BCoder[T] = {
-    c match {
-      case Beam(c) => c
-      case Fallback(ct) =>
-        WrappedBCoder.create(com.spotify.scio.Implicits.RichCoderRegistry(r)
-          .getScalaCoder[T](o)(ct))
-      case Transform(c, f) =>
-        val u = f(beam(r, o, c))
-        WrappedBCoder.create(beam(r, o, u))
-      case Record(coders) =>
-        new RecordCoder(coders.map(c => c._1 -> beam(r, o, c._2)))
-      case Disjonction(idCoder, id, coders) =>
-        WrappedBCoder.create(DisjonctionCoder(
-          beam(r, o, idCoder),
-          id,
-          coders.mapValues(u => beam(r, o, u)).map(identity)))
-    }
-  }
 }
 
 sealed trait AtomCoders extends LowPriorityFallbackCoder {
@@ -204,15 +168,12 @@ sealed trait AtomCoders extends LowPriorityFallbackCoder {
 sealed trait LowPriorityFallbackCoder extends LowPriorityCoderDerivation {
   import language.experimental.macros
   implicit def lowPriorityImplicitFallback[T](implicit lp: shapeless.LowPriority): Coder[T] =
-    macro com.spotify.scio.avro.types.CoderUtils.issueFallbackWarning[T]
+    macro com.spotify.scio.coders.CoderMacros.issueFallbackWarning[T]
 }
 
 final object Coder
   extends CoderGrammar
   with AtomCoders
   with TupleCoders {
-  def kvCoder[K, V](ctx: ScioContext)(implicit k: Coder[K], v: Coder[V]): KvCoder[K, V] =
-    KvCoder.of(Coder.beam(ctx, Coder[K]), Coder.beam(ctx, Coder[V]))
-
   def apply[T](implicit c: Coder[T]): Coder[T] = c
 }

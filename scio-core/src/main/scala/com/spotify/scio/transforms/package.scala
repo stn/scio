@@ -22,7 +22,7 @@ import java.net.URI
 import java.nio.file.Path
 
 import com.spotify.scio.util._
-import com.spotify.scio.coders.Coder
+import com.spotify.scio.coders.{Coder, CoderMaterializer}
 import com.spotify.scio.coders.Implicits._
 import com.spotify.scio.values.SCollection
 import org.apache.beam.sdk.transforms.DoFn.ProcessElement
@@ -230,8 +230,8 @@ package object transforms {
       }
       val tuple = self.applyInternal(
         ParDo.of(doFn).withOutputTags(mainTag, TupleTagList.of(errorTag)))
-      val main = tuple.get(mainTag).setCoder(Coder.beam(self.context, Coder[U]))
-      val errorPipe = tuple.get(errorTag).setCoder(Coder.beam(self.context, Coder[(T, Throwable)]))
+      val main = tuple.get(mainTag).setCoder(CoderMaterializer.beam(self.context, Coder[U]))
+      val errorPipe = tuple.get(errorTag).setCoder(CoderMaterializer.beam(self.context, Coder[(T, Throwable)]))
       (self.context.wrap(main), self.context.wrap(errorPipe))
     }
 

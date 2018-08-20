@@ -22,7 +22,7 @@ import java.util.UUID
 import com.google.api.services.bigquery.model.TableReference
 import com.spotify.scio.ScioContext
 import com.spotify.scio.bigquery.{BigQueryClient, TableRow}
-import com.spotify.scio.coders.{AvroBytesUtil, Coder}
+import com.spotify.scio.coders.{AvroBytesUtil, Coder, CoderMaterializer}
 import com.spotify.scio.values.SCollection
 import com.twitter.chill.Externalizer
 import org.apache.avro.Schema
@@ -98,7 +98,7 @@ case class ObjectFileTap[T: Coder](path: String) extends Tap[T] {
   override def value: Iterator[T] = {
     val elemCoder = Coder[T]
     FileStorage(path).avroFile[GenericRecord](AvroBytesUtil.schema).map { r =>
-      AvroBytesUtil.decode(Coder.beamWithDefault(elemCoder), r)
+      AvroBytesUtil.decode(CoderMaterializer.beamWithDefault(elemCoder), r)
     }
   }
   override def open(sc: ScioContext): SCollection[T] = sc.objectFile(path)

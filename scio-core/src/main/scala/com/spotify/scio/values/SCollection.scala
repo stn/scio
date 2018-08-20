@@ -19,7 +19,7 @@
 
 package com.spotify.scio.values
 
-import com.spotify.scio.coders.Coder
+import com.spotify.scio.coders.{Coder, CoderMaterializer}
 import com.spotify.scio.coders.Implicits._
 
 import java.io.PrintStream
@@ -154,9 +154,9 @@ sealed trait SCollection[T] extends PCollectionWrapper[T] {
   def applyTransform[U: Coder](transform: PTransform[_ >: PCollection[T], PCollection[U]])
   : SCollection[U] = {
     if (context.isTest) {
-      org.apache.beam.sdk.util.SerializableUtils.ensureSerializable(Coder.beam(context, Coder[U]))
+      org.apache.beam.sdk.util.SerializableUtils.ensureSerializable(CoderMaterializer.beam(context, Coder[U]))
     }
-    this.pApply(transform).setCoder(Coder.beam(context, Coder[U]))
+    this.pApply(transform).setCoder(CoderMaterializer.beam(context, Coder[U]))
   }
 
   /**
@@ -169,9 +169,9 @@ sealed trait SCollection[T] extends PCollectionWrapper[T] {
     implicit koder: Coder[K], voder: Coder[V])
   : SCollection[KV[K, V]] = {
     if (context.isTest) {
-      org.apache.beam.sdk.util.SerializableUtils.ensureSerializable(Coder.kvCoder[K, V](context))
+      org.apache.beam.sdk.util.SerializableUtils.ensureSerializable(CoderMaterializer.kvCoder[K, V](context))
     }
-    this.pApply(transform).setCoder(Coder.kvCoder[K, V](context))
+    this.pApply(transform).setCoder(CoderMaterializer.kvCoder[K, V](context))
   }
 
   /** Apply a transform. */
@@ -420,7 +420,7 @@ sealed trait SCollection[T] extends PCollectionWrapper[T] {
    */
   def groupBy[K](f: T => K)(
     implicit kcoder: Coder[K], vcoder: Coder[T]): SCollection[(K, Iterable[T])] = this.transform {
-    val coder = Coder.kvCoder[K, T](context)
+    val coder = CoderMaterializer.kvCoder[K, T](context)
     _
       .pApply(WithKeys.of(Functions.serializableFn(f))).setCoder(coder)
       .pApply(GroupByKey.create[K, T]()).map(kvIterableToTuple)
@@ -981,7 +981,7 @@ sealed trait SCollection[T] extends PCollectionWrapper[T] {
     } else {
       implicit val avroCoder = genericRecordCoder(AvroBytesUtil.schema)
       this
-        .parDo(new AvroEncodeDoFn[T](Coder.beam(context, elemCoder)))
+        .parDo(new AvroEncodeDoFn[T](CoderMaterializer.beam(context, elemCoder)))
         .saveAsAvroFile(path, numShards, AvroBytesUtil.schema, suffix, metadata = metadata)
       context.makeFuture(ObjectFileTap[T](ScioUtil.addPartSuffix(path)))
     }
@@ -1283,7 +1283,7 @@ sealed trait SCollection[T] extends PCollectionWrapper[T] {
       } else {
         val t = setup(psio.PubsubIO.writeMessages())
         this.map { t =>
-          val payload = CoderUtils.encodeToByteArray(Coder.beam(context, coder), t)
+          val payload = CoderUtils.encodeToByteArray(CoderMaterializer.beam(context, coder), t)
           new PubsubMessage(payload, Map.empty[String, String].asJava)
         }.applyInternal(t)
       }

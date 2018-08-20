@@ -20,7 +20,7 @@ package com.spotify.scio
 import java.sql.{Driver, PreparedStatement, ResultSet}
 
 import com.spotify.scio.io.Tap
-import com.spotify.scio.coders.Coder
+import com.spotify.scio.coders.{Coder, CoderMaterializer}
 import com.spotify.scio.coders.Implicits._
 import com.spotify.scio.testing.TestIO
 import com.spotify.scio.values.SCollection
@@ -124,7 +124,7 @@ package object jdbc {
         val coder = Coder[T]
         val connOpts = readOptions.connectionOptions
         var transform = jio.JdbcIO.read[T]()
-          .withCoder(Coder.beam(self, coder))
+          .withCoder(CoderMaterializer.beam(self, coder))
           .withDataSourceConfiguration(getDataSourceConfig(readOptions.connectionOptions))
           .withQuery(readOptions.query)
           .withRowMapper(new jio.JdbcIO.RowMapper[T] {

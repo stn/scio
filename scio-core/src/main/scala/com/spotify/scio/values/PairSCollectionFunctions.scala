@@ -17,7 +17,7 @@
 
 package com.spotify.scio.values
 
-import com.spotify.scio.coders.Coder
+import com.spotify.scio.coders.{Coder, CoderMaterializer}
 import com.spotify.scio.coders.Implicits._
 
 import java.lang.{Iterable => JIterable}
@@ -89,7 +89,7 @@ class PairSCollectionFunctions[K, V](val self: SCollection[(K, V)]) {
   private val toKvTransform = ParDo.of(Functions.mapFn[(K, V), KV[K, V]](kv => KV.of(kv._1, kv._2)))
 
   private[scio] def toKV(implicit koder: Coder[K], voder: Coder[V]): SCollection[KV[K, V]] = {
-    val coder = Coder.kvCoder[K, V](context)
+    val coder = CoderMaterializer.kvCoder[K, V](context)
     val o = self.applyInternal(toKvTransform).setCoder(coder)
     context.wrap(o)
   }
@@ -102,14 +102,14 @@ class PairSCollectionFunctions[K, V](val self: SCollection[(K, V)]) {
       override def expand(input: PCollection[(K, V)]): PCollection[(K, UO)] = {
         var kv = input
           .apply("TupleToKv", toKvTransform)
-          .setCoder(Coder.kvCoder[K, V](context))
+          .setCoder(CoderMaterializer.kvCoder[K, V](context))
           .apply(t)
         if (!kv.getCoder.isInstanceOf[KvCoder[_, _]]) {
-          kv = kv.setCoder(Coder.kvCoder[K, UI](context))
+          kv = kv.setCoder(CoderMaterializer.kvCoder[K, UI](context))
         }
         kv
           .apply("KvToTuple", ParDo.of(Functions.mapFn[KV[K, UI], (K, UO)](f)))
-          .setCoder(Coder.beam(context, Coder[(K, UO)]))
+          .setCoder(CoderMaterializer.beam(context, Coder[(K, UO)]))
     }})
     context.wrap(o)
   }
@@ -637,7 +637,7 @@ class PairSCollectionFunctions[K, V](val self: SCollection[(K, V)]) {
     val o = self.applyInternal(
       new PTransform[PCollection[(K, V)], PCollectionView[JMap[K, V]]]() {
         override def expand(input: PCollection[(K, V)]): PCollectionView[JMap[K, V]] = {
-          input.apply(toKvTransform).setCoder(Coder.kvCoder[K, V](context)).apply(View.asMap())
+          input.apply(toKvTransform).setCoder(CoderMaterializer.kvCoder[K, V](context)).apply(View.asMap())
         }
       })
     new MapSideInput[K, V](o)
@@ -655,7 +655,7 @@ class PairSCollectionFunctions[K, V](val self: SCollection[(K, V)]) {
     val o = self.applyInternal(
       new PTransform[PCollection[(K, V)], PCollectionView[JMap[K, JIterable[V]]]]() {
         override def expand(input: PCollection[(K, V)]): PCollectionView[JMap[K, JIterable[V]]] = {
-          input.apply(toKvTransform).setCoder(Coder.kvCoder[K, V](context)).apply(View.asMultimap())
+          input.apply(toKvTransform).setCoder(CoderMaterializer.kvCoder[K, V](context)).apply(View.asMultimap())
         }
       })
     new MultiMapSideInput[K, V](o)

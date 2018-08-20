@@ -31,7 +31,7 @@ import com.spotify.scio.avro.types.AvroType
 import com.spotify.scio.avro.types.AvroType.HasAvroAnnotation
 import com.spotify.scio.bigquery._
 import com.spotify.scio.bigquery.types.BigQueryType.HasAnnotation
-import com.spotify.scio.coders.{AvroBytesUtil, KryoAtomicCoder, KryoOptions, Coder}
+import com.spotify.scio.coders.{AvroBytesUtil, KryoAtomicCoder, KryoOptions, Coder, CoderMaterializer}
 import com.spotify.scio.coders.Implicits._
 import com.spotify.scio.io.Tap
 import com.spotify.scio.metrics.Metrics
@@ -530,7 +530,7 @@ class ScioContext private[scio] (val options: PipelineOptions,
       val coder = Coder[T]
       val recCoder = genericRecordCoder(AvroBytesUtil.schema)
       this.avroFile[GenericRecord](path, AvroBytesUtil.schema)(classTag[GenericRecord], recCoder)
-        .parDo(new AvroDecodeDoFn[T](Coder.beam(context, coder)))
+        .parDo(new AvroDecodeDoFn[T](CoderMaterializer.beam(context, coder)))
         .setName(path)
     }
   }
@@ -813,7 +813,7 @@ class ScioContext private[scio] (val options: PipelineOptions,
       wrap(this.applyInternal(t)).setName(name)
         .map { m =>
           val payload = CoderUtils.decodeFromByteArray(
-            Coder.beam(context, elementCoder), m.getPayload)
+            CoderMaterializer.beam(context, elementCoder), m.getPayload)
           val attributes = JMapWrapper.of(m.getAttributeMap)
           (payload, attributes)
         }
@@ -906,7 +906,7 @@ class ScioContext private[scio] (val options: PipelineOptions,
    * @group in_memory
    */
   def parallelize[T: Coder](elems: Iterable[T]): SCollection[T] = requireNotClosed {
-    wrap(this.applyInternal(Create.of(elems.asJava).withCoder(Coder.beam(context, Coder[T]))))
+    wrap(this.applyInternal(Create.of(elems.asJava).withCoder(CoderMaterializer.beam(context, Coder[T]))))
       .setName(truncate(elems.toString()))
   }
 
@@ -918,7 +918,7 @@ class ScioContext private[scio] (val options: PipelineOptions,
     implicit koder: Coder[K], voder: Coder[V]): SCollection[(K, V)] =
   requireNotClosed {
     // TODO: merge Create.of and map ?
-    val kvc = Coder.kvCoder[K, V](context)
+    val kvc = CoderMaterializer.kvCoder[K, V](context)
     wrap(this.applyInternal(Create.of(elems.asJava).withCoder(kvc)))
       .map(kv => (kv.getKey, kv.getValue))
       .setName(truncate(elems.toString()))

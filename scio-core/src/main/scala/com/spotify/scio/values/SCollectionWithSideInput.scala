@@ -18,7 +18,7 @@
 package com.spotify.scio.values
 
 import com.spotify.scio.ScioContext
-import com.spotify.scio.coders.Coder
+import com.spotify.scio.coders.{Coder, CoderMaterializer}
 import com.spotify.scio.coders.Implicits._
 import com.spotify.scio.util.FunctionsWithSideInput.SideInputDoFn
 import com.spotify.scio.util.{ClosureCleaner, FunctionsWithSideInput}
@@ -45,7 +45,7 @@ class SCollectionWithSideInput[T: Coder] private[values] (val internal: PCollect
   def filter(f: (T, SideInputContext[T]) => Boolean): SCollectionWithSideInput[T] = {
     val o = this
       .pApply(parDo(FunctionsWithSideInput.filterFn(f)))
-      .internal.setCoder(Coder.beam(context, Coder[T]))
+      .internal.setCoder(CoderMaterializer.beam(context, Coder[T]))
     new SCollectionWithSideInput[T](o, context, sides)
   }
 
@@ -54,7 +54,7 @@ class SCollectionWithSideInput[T: Coder] private[values] (val internal: PCollect
   : SCollectionWithSideInput[U] = {
     val o = this
       .pApply(parDo(FunctionsWithSideInput.flatMapFn(f)))
-      .internal.setCoder(Coder.beam(context, Coder[U]))
+      .internal.setCoder(CoderMaterializer.beam(context, Coder[U]))
     new SCollectionWithSideInput[U](o, context, sides)
   }
 
@@ -66,7 +66,7 @@ class SCollectionWithSideInput[T: Coder] private[values] (val internal: PCollect
   def map[U: Coder](f: (T, SideInputContext[T]) => U): SCollectionWithSideInput[U] = {
     val o = this
       .pApply(parDo(FunctionsWithSideInput.mapFn(f)))
-      .internal.setCoder(Coder.beam(context, Coder[U]))
+      .internal.setCoder(CoderMaterializer.beam(context, Coder[U]))
     new SCollectionWithSideInput[U](o, context, sides)
   }
 

@@ -37,7 +37,7 @@ def mkBounds(n):
 
 def tupleFns(out, n):
     types = mkTypes(n)
-    print >> out, '  implicit def tuple%sCoder[%s](implicit %s): Coder[(%s)] = gen[(%s)]' % (n, types, mkBounds(n), types, types)
+    print >> out, '  implicit def tuple%sCoder[%s](implicit %s): Coder[(%s)] = Coder.gen[(%s)]' % (n, types, mkBounds(n), types, types)
 
 
 def main(out):
@@ -59,7 +59,10 @@ def main(out):
          * under the License.
          */
 
-        // generated with tuplecoders.py
+        // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        // !! generated with tuplecoders.py
+        // !! DO NOT EDIT MANUALLY
+        // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
         // scalastyle:off cyclomatic.complexity
         // scalastyle:off file.size.limit
@@ -71,7 +74,6 @@ def main(out):
         package com.spotify.scio.coders
 
         trait TupleCoders {
-          import Coder.gen
         ''').replace('  # NOQA', '').lstrip('\n')
 
     N = 22

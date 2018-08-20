@@ -68,13 +68,13 @@ class CodersTest extends FlatSpec with Matchers {
   val user = User(userId, "johndoe", "johndoe@spotify.com")
 
   private def checkSer[A](implicit c: Coder[A]) = {
-    val beamCoder = Coder.beamWithDefault(c)
+    val beamCoder = CoderMaterializer.beamWithDefault(c)
     org.apache.beam.sdk.util.SerializableUtils.ensureSerializable(beamCoder)
   }
 
   import org.scalactic.Equality
   def check[T](t: T)(implicit C: Coder[T], eq: Equality[T]): Assertion = {
-    val beamCoder = Coder.beamWithDefault(C)
+    val beamCoder = CoderMaterializer.beamWithDefault(C)
     org.apache.beam.sdk.util.SerializableUtils.ensureSerializable(beamCoder)
     val enc = CoderUtils.encodeToByteArray(beamCoder, t)
     val dec = CoderUtils.decodeFromByteArray(beamCoder, enc)

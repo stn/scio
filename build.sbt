@@ -305,7 +305,8 @@ lazy val root: Project = Project(
   scioSchemas,
   scioExamples,
   scioRepl,
-  scioJmh
+  scioJmh,
+  scioCoders
 )
 
 lazy val scioCore: Project = Project(
@@ -345,14 +346,15 @@ lazy val scioCore: Project = Project(
 ).dependsOn(
   scioAvro,
   scioBigQuery % "test->test;compile->compile",
-  scioSchemas % "test->test"
+  scioSchemas % "test->test",
+  scioCoders
 ).enablePlugins(BuildInfoPlugin)
 
 lazy val scioTest: Project = Project(
   "scio-test",
   file("scio-test")
 ).settings(
-  commonSettings ++ itSettings,
+  commonSettings ++ itSettings ++ macroSettings,
   description := "Scio helpers for ScalaTest",
   libraryDependencies ++= Seq(
     "org.apache.beam" % "beam-runners-direct-java" % beamVersion,
@@ -369,14 +371,45 @@ lazy val scioTest: Project = Project(
     "com.spotify.sparkey" % "sparkey" % sparkeyVersion % "test",
     "com.novocode" % "junit-interface" % junitInterfaceVersion,
     "junit" % "junit" % junitVersion % "test"
-  ),
-  addCompilerPlugin(paradiseDependency)
+  )
 ).configs(
   IntegrationTest
 ).dependsOn(
   scioCore % "test->test;compile->compile",
   scioSchemas % "test,it"
 )
+
+lazy val scioCodersMacros: Project = Project(
+  "scio-coders-macros",
+  file("scio-coders-macros")
+).settings(
+  commonSettings ++ macroSettings,
+  description := "Scio add-on for static Coder derivation (macros)",
+  libraryDependencies ++= Seq(
+    "org.apache.beam" % "beam-sdks-java-core" % beamVersion,
+    "org.apache.beam" % "beam-runners-google-cloud-dataflow-java" % beamVersion % "provided",
+    "org.scalatest" %% "scalatest" % scalatestVersion % "test",
+    "com.propensive" %% "magnolia" % magnoliaVersion,
+    "com.chuusai" %% "shapeless" % shapelessVersion,
+    "com.twitter" %% "algebird-core" % algebirdVersion
+  )
+)
+
+lazy val scioCoders: Project = Project(
+  "scio-coders",
+  file("scio-coders")
+).settings(
+  commonSettings,
+  description := "Scio add-on for static Coder derivation",
+  libraryDependencies ++= Seq(
+    "org.apache.beam" % "beam-sdks-java-core" % beamVersion,
+    "org.apache.beam" % "beam-runners-google-cloud-dataflow-java" % beamVersion % "provided",
+    "org.scalatest" %% "scalatest" % scalatestVersion % "test",
+    "com.propensive" %% "magnolia" % magnoliaVersion,
+    "com.chuusai" %% "shapeless" % shapelessVersion,
+    "com.twitter" %% "algebird-core" % algebirdVersion
+  )
+).dependsOn(scioCodersMacros)
 
 lazy val scioAvro: Project = Project(
   "scio-avro",
@@ -390,9 +423,7 @@ lazy val scioAvro: Project = Project(
     "org.slf4j" % "slf4j-simple" % slf4jVersion % "test,it",
     "org.scalatest" %% "scalatest" % scalatestVersion % "test,it",
     "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % scalacheckShapelessVersion % "test",
-    "me.lyh" %% "shapeless-datatype-core" % shapelessDatatypeVersion % "test",
-    "com.propensive" %% "magnolia" % magnoliaVersion,
-    "com.chuusai" %% "shapeless" % shapelessVersion
+    "me.lyh" %% "shapeless-datatype-core" % shapelessDatatypeVersion % "test"
   ) ++ beamSDKIO
 ).configs(IntegrationTest)
 

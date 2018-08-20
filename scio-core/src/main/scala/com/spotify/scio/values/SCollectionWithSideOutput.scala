@@ -18,7 +18,7 @@
 package com.spotify.scio.values
 
 import com.spotify.scio.ScioContext
-import com.spotify.scio.coders.Coder
+import com.spotify.scio.coders.{Coder, CoderMaterializer}
 import com.spotify.scio.coders.Implicits._
 import com.spotify.scio.util.FunctionsWithSideOutput
 import org.apache.beam.sdk.transforms.ParDo
@@ -50,7 +50,7 @@ class SCollectionWithSideOutput[T] private[values]
     val tuple = this.applyInternal(
       ParDo.of(FunctionsWithSideOutput.flatMapFn(f)).withOutputTags(mainTag, sideTags))
 
-    val main = tuple.get(mainTag).setCoder(Coder.beam(context, Coder[U]))
+    val main = tuple.get(mainTag).setCoder(CoderMaterializer.beam(context, Coder[U]))
     (context.wrap(main), new SideOutputCollections(tuple, context))
   }
 
@@ -64,7 +64,7 @@ class SCollectionWithSideOutput[T] private[values]
     val tuple = this.applyInternal(
       ParDo.of(FunctionsWithSideOutput.mapFn(f)).withOutputTags(mainTag, sideTags))
 
-    val main = tuple.get(mainTag).setCoder(Coder.beam(context, Coder[U]))
+    val main = tuple.get(mainTag).setCoder(CoderMaterializer.beam(context, Coder[U]))
     (context.wrap(main), new SideOutputCollections(tuple, context))
   }
 

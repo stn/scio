@@ -15,12 +15,12 @@
  * under the License.
  */
 
-package com.spotify.scio.avro.types
+package com.spotify.scio.coders
 
 import org.apache.avro.specific.SpecificRecordBase
 import scala.reflect.macros._
 
-private[scio] object CoderUtils {
+private[coders] object CoderMacros {
 
 
   /**

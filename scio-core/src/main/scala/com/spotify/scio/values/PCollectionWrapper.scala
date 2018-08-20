@@ -18,7 +18,7 @@
 package com.spotify.scio.values
 
 import com.spotify.scio.ScioContext
-import com.spotify.scio.coders.Coder
+import com.spotify.scio.coders.{Coder, CoderMaterializer}
 import org.apache.beam.sdk.transforms.{Combine, DoFn, PTransform, ParDo}
 import org.apache.beam.sdk.values.{PCollection, POutput}
 
@@ -49,7 +49,7 @@ private[values] trait PCollectionWrapper[T] extends TransformNameable {
   }
 
   private[scio] def parDo[U: Coder](fn: DoFn[T, U]): SCollection[U] =
-    this.pApply(ParDo.of(fn)).setCoder(Coder.beam(context, Coder[U]))
+    this.pApply(ParDo.of(fn)).setCoder(CoderMaterializer.beam(context, Coder[U]))
 
   // private[scio] def getCoder[U: ClassTag]: Coder[U] =
   //   internal.getPipeline.getCoderRegistry.getScalaCoder[U](context.options)

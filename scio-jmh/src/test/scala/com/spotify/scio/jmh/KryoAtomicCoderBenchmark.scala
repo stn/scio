@@ -60,8 +60,8 @@ class KryoAtomicCoderBenchmark {
   val javaCoder = SerializableCoder.of(classOf[User])
   val specializedCoder = new SpecializedCoder
   val specializedKryoCoder = new KryoAtomicCoder[SpecializedUser](KryoOptions())
-  val derivedCoder = Coder.beamWithDefault(Coder[SpecializedUserForDerived])
-  val derivedListCoder = Coder.beamWithDefault(Coder[List[SpecializedUserForDerived]])
+  val derivedCoder = CoderMaterializer.beamWithDefault(Coder[SpecializedUserForDerived])
+  val derivedListCoder = CoderMaterializer.beamWithDefault(Coder[List[SpecializedUserForDerived]])
 
   @Benchmark
   def kryoEncode: Array[Byte] = {
