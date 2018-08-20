@@ -40,6 +40,28 @@ case class ParameterizedDummy[A](value: A)
 
 case class MultiParameterizedDummy[A, B](valuea: A, valueb: B)
 
+object TestObject
+
+case class CaseClassWithExplicitCoder(i: Int, s: String)
+object CaseClassWithExplicitCoder {
+  import org.apache.beam.sdk.coders.{AtomicCoder, StringUtf8Coder, VarIntCoder}
+  import java.io.{InputStream, OutputStream}
+  implicit val caseClassWithExplicitCoderCoder =
+    Coder.beam(new AtomicCoder[CaseClassWithExplicitCoder]{
+      val sc = StringUtf8Coder.of()
+      val ic = VarIntCoder.of()
+      def encode(value: CaseClassWithExplicitCoder, os: OutputStream): Unit = {
+        ic.encode(value.i, os)
+        sc.encode(value.s, os)
+      }
+      def decode(is: InputStream): CaseClassWithExplicitCoder = {
+        val i = ic.decode(is)
+        val s = sc.decode(is)
+        CaseClassWithExplicitCoder(i, s)
+      }
+    })
+}
+
 class CodersTest extends FlatSpec with Matchers {
 
   val userId = UserId(Array[Byte](1, 2, 3, 4))
@@ -165,14 +187,15 @@ class CodersTest extends FlatSpec with Matchers {
     checkNotFallback(new DateTime)
     checkNotFallback(FileSystems.getDefault().getPath("logs", "access.log"))
 
+
   }
 
   it should "Serialize objects" ignore {
-    // TODO
+    check(TestObject)
   }
 
   it should "only derive Coder if no coder exists" ignore {
-    // TODO
+    checkNotFallback(CaseClassWithExplicitCoder(1, "hello"))
   }
 
   private def withSCollection[T: Coder](fn: SCollection[T] => Assertion): Assertion = {

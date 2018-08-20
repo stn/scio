@@ -24,6 +24,7 @@ import com.twitter.algebird.{Monoid, Semigroup}
 import org.apache.beam.sdk.testing.CombineFnTester
 import org.apache.beam.sdk.transforms.Combine.CombineFn
 import org.openjdk.jmh.annotations._
+import com.spotify.scio.coders.Implicits._
 
 import scala.collection.JavaConverters._
 

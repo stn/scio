@@ -203,7 +203,7 @@ sealed trait AtomCoders extends LowPriorityFallbackCoder {
 
 sealed trait LowPriorityFallbackCoder extends LowPriorityCoderDerivation {
   import language.experimental.macros
-  implicit def implicitFallback[T](implicit lp: shapeless.LowPriority): Coder[T] =
+  implicit def lowPriorityImplicitFallback[T](implicit lp: shapeless.LowPriority): Coder[T] =
     macro com.spotify.scio.avro.types.CoderUtils.issueFallbackWarning[T]
 }
 

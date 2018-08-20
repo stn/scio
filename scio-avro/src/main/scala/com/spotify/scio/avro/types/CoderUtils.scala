@@ -24,7 +24,7 @@ private[scio] object CoderUtils {
 
 
   /**
-  * Generate a coder which does not serializa the schema and relies exclusively on type.
+  * Generate a coder which does not serialize the schema and relies exclusively on types.
   */
   def staticInvokeCoder[T <: SpecificRecordBase : c.WeakTypeTag](c: blackbox.Context): c.Tree = {
     import c.universe._
