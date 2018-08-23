@@ -31,6 +31,8 @@ import scala.reflect.runtime.universe._
 /** Enhanced version of [[SCollection]] with Avro methods. */
 final class AvroSCollection[T](@transient val self: SCollection[T]) extends Serializable {
 
+  import self.ct
+
   /**
    * Save this SCollection as an Avro file.
    * @param schema must be not null if `T` is of type
